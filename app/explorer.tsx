@@ -1,5 +1,11 @@
-﻿"use client";
-import { useEffect, useRef, useState } from "react";
+"use client";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  bookmarkSnapshot,
+  parseBookmarks,
+  saveBookmarks,
+  subscribeBookmarks,
+} from "./lib/bookmarks";
 import type { PointerEvent, WheelEvent } from "react";
 import {
   concepts,
@@ -24,6 +30,8 @@ const kindLabels: Record<ComponentKind, string> = {
   Pattern: "Architecture pattern",
   External: "Outside Kubernetes",
 };
+const validConceptIds = new Set(concepts.map((c) => c.id));
+const emptyBookmarkSnapshot = () => "[]";
 const iconFor = (layer: Layer) => layers.find((l) => l.id === layer)!.icon;
 const nodeById = Object.fromEntries(mapNodes.map((n) => [n.id, n])) as Record<
   string,
@@ -226,7 +234,7 @@ function Worker({
       >
         <Icon name="cpu" x={x + 17} y={y + 50} size={18} color="#94a6c4" />
         <text x={x + 45} y={y + 64} className="worker-meta">
-          kubelet Â· runtime Â· CNI
+          kubelet · runtime · CNI
         </text>
       </g>
       {Array.from({ length: 3 }, (_, p) => {
@@ -284,7 +292,7 @@ function Worker({
           ? "Replacements need surviving capacity"
           : scenario === "traffic-spike"
             ? "Illustrative slots: 3 per node"
-            : "Application replicas Â· illustrative placement"}
+            : "Application replicas · illustrative placement"}
       </text>
     </g>
   );
@@ -435,7 +443,7 @@ function ArchitectureMap({
         </defs>
         <rect width={width} height={height} fill="url(#grid)" />
         <text x="35" y="31" className="group-title" fill="#78c9ff">
-          01 â€” THE OUTSIDE WORLD
+          01 — THE OUTSIDE WORLD
         </text>
         <rect
           x="20"
@@ -446,7 +454,7 @@ function ArchitectureMap({
           className="group-box delivery-box"
         />
         <text x="40" y="272" className="group-title" fill="#f2bd82">
-          02 â€” RELEASE DELIVERY
+          02 — RELEASE DELIVERY
         </text>
         <rect
           x="305"
@@ -459,7 +467,7 @@ function ArchitectureMap({
           strokeWidth="1.5"
         />
         <text x="330" y="247" className="cluster-label">
-          âŽˆ PRIMARY CLUSTER
+          ⎈ PRIMARY CLUSTER
         </text>
         <text
           x="1367"
@@ -480,19 +488,19 @@ function ArchitectureMap({
           stroke="#47385e"
         />
         <text x="340" y="398" className="group-title" fill="#b8a3ff">
-          03 â€” CONTROL PLANE
+          03 — CONTROL PLANE
         </text>
         <text x="1350" y="398" textAnchor="end" className="node-kind">
-          STATE + RECONCILIATION Â· NOT APPLICATION TRAFFIC
+          STATE + RECONCILIATION · NOT APPLICATION TRAFFIC
         </text>
         <text x="340" y="425" className="group-title" fill="#67dfd0">
-          04 â€” NETWORK & SERVICE DISCOVERY
+          04 — NETWORK & SERVICE DISCOVERY
         </text>
         <text x="340" y="556" className="group-title" fill="#89b4ff">
-          05 â€” WORKLOAD CONTROL & ELASTICITY
+          05 — WORKLOAD CONTROL & ELASTICITY
         </text>
         <text x="340" y="682" className="group-title" fill="#89b4ff">
-          06 â€” DATA PLANE / WORKER CAPACITY
+          06 — DATA PLANE / WORKER CAPACITY
         </text>
         {mapLinks.map((l, i) => {
           const a = nodeById[l.from],
@@ -530,7 +538,7 @@ function ArchitectureMap({
           className="connection-line traffic"
         />
         <text x="755" y="863" className="edge-caption">
-          Service forwarding â†’ ready Pod endpoints
+          Service forwarding → ready Pod endpoints
         </text>
         <path
           d="M 580 815 L 286 815 L 286 1081 L 300 1081"
@@ -591,12 +599,12 @@ function ArchitectureMap({
               className="worker-meta"
               fill="#8bdbac"
             >
-              + NODE D Â· 3 READY REPLICAS
+              + NODE D · 3 READY REPLICAS
             </text>
           </g>
         )}
         <text x="35" y="1024" className="group-title" fill="#e7c98d">
-          07 â€” DATA, TELEMETRY & RECOVERY
+          07 — DATA, TELEMETRY & RECOVERY
         </text>
         {dr && (
           <g
@@ -613,10 +621,10 @@ function ArchitectureMap({
               strokeDasharray={sim.secondaryActive ? "0" : "7 6"}
             />
             <text x="1465" y="252" className="cluster-label">
-              âŽˆ SECONDARY CLUSTER
+              ⎈ SECONDARY CLUSTER
             </text>
             <text x="1465" y="278" className="node-kind" fill="#78c9ff">
-              OPTIONAL Â· INDEPENDENT REGION
+              OPTIONAL · INDEPENDENT REGION
             </text>
             <rect
               x="1470"
@@ -632,7 +640,7 @@ function ArchitectureMap({
               Independent control plane
             </text>
             <text x="1490" y="387" className="worker-meta">
-              Separate API server Â· etcd Â· controllers
+              Separate API server · etcd · controllers
             </text>
             <rect
               x="1470"
@@ -648,7 +656,7 @@ function ArchitectureMap({
               Standby workload capacity
             </text>
             <text x="1490" y="532" className="worker-meta">
-              Own gateway Â· Services Â· ready Pods
+              Own gateway · Services · ready Pods
             </text>
             <text x="1490" y="560" className="worker-meta">
               Traffic policy and health checks required
@@ -660,7 +668,7 @@ function ArchitectureMap({
               fill={sim.secondaryActive ? "#67dfd0" : "#94a6c4"}
             >
               {sim.secondaryActive
-                ? "PROMOTED Â· SERVING TRAFFIC"
+                ? "PROMOTED · SERVING TRAFFIC"
                 : "ILLUSTRATIVE WARM STANDBY"}
             </text>
             <rect
@@ -680,7 +688,7 @@ function ArchitectureMap({
               Replication or restore outside Kubernetes
             </text>
             <text x="1490" y="778" className="worker-meta">
-              Consistency Â· fencing Â· tested RTO/RPO
+              Consistency · fencing · tested RTO/RPO
             </text>
             <text x="1490" y="805" className="worker-meta">
               Cluster state is not cross-region replicated
@@ -721,7 +729,7 @@ function ArchitectureMap({
         </button>
       </div>
       <span className="pan-hint">
-        Drag to pan Â· Ctrl / âŒ˜ + scroll to zoom Â· Tab to explore
+        Drag to pan · Ctrl / ⌘ + scroll to zoom · Tab to explore
       </span>
     </div>
   );
@@ -917,12 +925,18 @@ export default function Explorer() {
   const [search, setSearch] = useState(""),
     [kind, setKind] = useState("all"),
     [savedOnly, setSavedOnly] = useState(false),
-    [bookmarks, setBookmarks] = useState<string[]>([]),
     [activeJourney, setActiveJourney] = useState<string | null>(null),
     [journeyStep, setJourneyStep] = useState(0),
     [showAbout, setShowAbout] = useState(false);
   const [migrationDone, setMigrationDone] = useState<number[]>([]);
   const [hint, setHint] = useState("");
+  const savedSnapshot = useSyncExternalStore(
+    subscribeBookmarks,
+    bookmarkSnapshot,
+    emptyBookmarkSnapshot,
+  );
+  const bookmarks = parseBookmarks(savedSnapshot, validConceptIds);
+  const searchInput = useRef<HTMLInputElement>(null);
   const journey = journeys.find((j) => j.id === activeJourney),
     step = journey?.steps[journeyStep];
   const currentId = step?.node ?? selected,
@@ -945,6 +959,16 @@ export default function Explorer() {
       if (e.key === "Escape") {
         setPresentation(false);
         setShowAbout(false);
+      }
+      if (
+        e.key === "/" &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement)
+      ) {
+        e.preventDefault();
+        setView("library");
+        setSavedOnly(false);
+        requestAnimationFrame(() => searchInput.current?.focus());
       }
     };
     window.addEventListener("keydown", escape);
@@ -996,34 +1020,12 @@ export default function Explorer() {
     const next = bookmarks.includes(currentId)
       ? bookmarks.filter((id) => id !== currentId)
       : [...bookmarks, currentId];
-    setBookmarks(next);
-    try {
-      localStorage.setItem(
-        "kubernetes-observatory-saved",
-        JSON.stringify(next),
-      );
-      setHint("Saved on this device");
-    } catch {
-      setHint("Saved for this session");
-    }
+    setHint(
+      saveBookmarks(next) ? "Saved on this device" : "Saved for this session",
+    );
     setTimeout(() => setHint(""), 2000);
   }
   function restoreSaved() {
-    try {
-      const raw = JSON.parse(
-        localStorage.getItem("kubernetes-observatory-saved") ?? "[]",
-      );
-      if (Array.isArray(raw))
-        setBookmarks(
-          raw
-            .filter(
-              (x): x is string => typeof x === "string" && !!conceptById[x],
-            )
-            .slice(0, concepts.length),
-        );
-    } catch {
-      setBookmarks([]);
-    }
     setSavedOnly(true);
     setView("library");
   }
@@ -1038,7 +1040,7 @@ export default function Explorer() {
           onClick={() => setView("architecture")}
           aria-label="Kubernetes Observatory home"
         >
-          <span className="brand-symbol">âŽˆ</span>
+          <span className="brand-symbol">⎈</span>
           <span>
             KUBERNETES<span className="brand-sub">OBSERVATORY</span>
           </span>
@@ -1067,7 +1069,7 @@ export default function Explorer() {
           </button>
         </nav>
         <button className="status-pill" onClick={() => setShowAbout(true)}>
-          <i /> A living reference <span>â†—</span>
+          <i /> A living reference <span>↗</span>
         </button>
       </header>
       <section className="intro">
@@ -1109,11 +1111,11 @@ export default function Explorer() {
           <div className="orbit orbit-one" />
           <div className="orbit orbit-two" />
           <div className="orbit orbit-three" />
-          <div className="hero-core">âŽˆ</div>
+          <div className="hero-core">⎈</div>
           <div className="orbit-dot d1" />
           <div className="orbit-dot d2" />
           <div className="orbit-dot d3" />
-          <span className="hero-caption">DESIRED STATE â†’ LIVING SYSTEM</span>
+          <span className="hero-caption">DESIRED STATE → LIVING SYSTEM</span>
         </div>
       </section>
       <div className="section-line">
@@ -1201,7 +1203,7 @@ export default function Explorer() {
                       onClick={() => setZoom((z) => Math.max(0.8, z - 0.2))}
                       aria-label="Zoom out"
                     >
-                      âˆ’
+                      −
                     </button>
                     <span>{Math.round(zoom * 100)}%</span>
                     <button
@@ -1240,6 +1242,7 @@ export default function Explorer() {
                 </div>
                 <label className="dr-switch">
                   <input
+                    ref={searchInput}
                     type="checkbox"
                     checked={dr}
                     onChange={(e) => {
@@ -1337,7 +1340,7 @@ export default function Explorer() {
                     type="search"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search concepts, behavior, or a failureâ€¦"
+                    placeholder="Search concepts, behavior, or a failure…"
                     aria-label="Search concepts"
                   />
                   <kbd>/</kbd>
@@ -1427,7 +1430,7 @@ export default function Explorer() {
                 </div>
                 <span className="progress-caption">
                   {migrationDone.length} of {migrationSteps.length} stages
-                  reviewed Â· session checklist
+                  reviewed · session checklist
                 </span>
               </div>
               <div className="migration-list">
@@ -1497,7 +1500,7 @@ export default function Explorer() {
                 </h3>
                 <p>{j.description}</p>
                 <small>
-                  {j.steps.length} connected steps <span>â†—</span>
+                  {j.steps.length} connected steps <span>↗</span>
                 </small>
               </button>
             ))}
@@ -1562,7 +1565,7 @@ export default function Explorer() {
       <section className="architecture-notes">
         <div>
           <Icon name="layers" size={22} />
-          <strong>Core â‰  ecosystem</strong>
+          <strong>Core ≠ ecosystem</strong>
           <p>
             Native APIs, optional tools, external services, and architecture
             patterns are labeled separately.
@@ -1586,7 +1589,7 @@ export default function Explorer() {
         </div>
       </section>
       <footer>
-        <span>âŽˆ Kubernetes Observatory</span>
+        <span>⎈ Kubernetes Observatory</span>
         <p>
           Independent educational project. Vendor-neutral. Simulations are not a
           running Kubernetes cluster.
@@ -1618,7 +1621,7 @@ export default function Explorer() {
             >
               <Icon name="close" />
             </button>
-            <span className="brand-symbol">âŽˆ</span>
+            <span className="brand-symbol">⎈</span>
             <p className="eyebrow">A SYSTEM YOU CAN EXPLORE</p>
             <h2 id="about-title">Architecture in motion.</h2>
             <p>
@@ -1645,14 +1648,14 @@ export default function Explorer() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Kubernetes documentation â†—
+                Kubernetes documentation ↗
               </a>
               <a
                 href="https://github.com/Abhishek8399/KubernetesObservabilityTool"
                 target="_blank"
                 rel="noreferrer"
               >
-                Source repository â†—
+                Source repository ↗
               </a>
             </div>
           </section>

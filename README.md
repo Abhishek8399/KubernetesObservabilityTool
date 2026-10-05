@@ -42,7 +42,7 @@ The checks cover TypeScript, ESLint, concept/graph integrity, simulation behavio
 
 ## Publish
 
-The GitHub Actions workflow validates the source, builds `dist-static`, and deploys GitHub Pages. In repository **Settings â†’ Pages**, set **Source** to **GitHub Actions** before the first deployment. Push approved changes to `main` or run the workflow manually.
+The GitHub Actions workflow validates the source, builds `dist-static`, and deploys GitHub Pages. In repository **Settings → Pages**, set **Source** to **GitHub Actions** before the first deployment. Push approved changes to `main` or run the workflow manually.
 
 GitHub Pages uses the repository-specific `/KubernetesObservabilityTool/` base path. The retained vinext starter also supports a Worker build through `npm run build`; the public deployment uses only the static build and needs no Worker, database, authentication service, or server secrets.
 

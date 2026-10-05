@@ -37,6 +37,11 @@ for (const marker of [
   assert.ok(js.includes(marker), `Missing content: ${marker}`);
 assert.ok(css.includes("prefers-reduced-motion"));
 assert.ok(css.includes("@media"));
+for (const badEncoding of ["\u00e2\u20ac", "\u00e2\u017d", "\u00c2\u00b7"])
+  assert.ok(
+    !js.includes(badEncoding),
+    "The public bundle contains corrupted text encoding.",
+  );
 assert.ok(fs.existsSync(path.join(root, "favicon.svg")));
 assert.ok(!fs.existsSync(path.join(root, ".env")));
 for (const forbidden of [

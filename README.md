@@ -6,7 +6,9 @@ A vendor-neutral, interactive Kubernetes architecture explorer for engineers, te
 
 ## Explore
 
-- An animated SVG architecture with pan, zoom, keyboard-accessible components, layer filters, and presentation mode.
+- A full-screen dimensional architecture world with raised platforms, server towers, illuminated connections, moving request particles, pan, zoom, and keyboard-accessible components.
+- Click-to-open component popups with explanations, illustrative configuration, diagnostics, related concepts, and bookmarks. Details do not occupy a permanent sidebar.
+- Optional, quiet interaction sounds synthesized locally with Web Audio. Sound starts muted and requires the reader to enable it.
 - A searchable library of 71 concepts with explanations, configuration examples, diagnostics, and official documentation links.
 - Four guided journeys: request lifecycle, release deployment, scaling, and recovery.
 - Eight illustrative system scenarios, including Pod, zone, and regional failure, blocked networking, and dependency outages.
@@ -38,7 +40,9 @@ PUBLIC_BASE_PATH=/KubernetesObservabilityTool/ npm run build:static
 PUBLIC_BASE_PATH=/KubernetesObservabilityTool/ npm run smoke:static
 ```
 
-The checks cover TypeScript, ESLint, concept/graph integrity, simulation behavior, and the static artifact's content, assets, and base path. They do not substitute for browser visual or interaction testing.
+The checks cover TypeScript, ESLint, concept/graph integrity, separation of request and control paths, visible Pod placement during failures, simulation behavior, and the static artifact's content, assets, and base path. They do not substitute for browser visual or interaction testing.
+
+For a manual interaction check: click an architecture component; switch its Understand/Configure/Diagnose tabs; close with Escape; search the library; run a guided request; enable and mute sound; lose a zone and check the ready counts; run a regional failure with and without standby; pause the simulation; check a narrow viewport and reduced-motion preferences. Web Audio needs a supported browser and an explicit user gesture.
 
 ## Publish
 
@@ -48,7 +52,7 @@ GitHub Pages uses the repository-specific `/KubernetesObservabilityTool/` base p
 
 ## Content and maintenance
 
-Concepts are in `app/data/concepts.ts`, journeys in `app/data/journeys.ts`, illustrative manifests in `app/data/examples.ts`, and scenario behavior in `app/lib/simulation.ts`. The interactive UI is in `app/explorer.tsx`; diagrams and icons are code-native SVG.
+Concepts are in `app/data/concepts.ts`, journeys in `app/data/journeys.ts`, illustrative manifests in `app/data/examples.ts`, and scenario behavior in `app/lib/simulation.ts`. The full-screen interface is in `app/universe.tsx`, scene geometry in `app/architecture-scene.tsx`, connections in `app/data/world.ts`, styles in `app/universe.css`, and sound generation in `app/lib/sound.ts`. The previous explorer supplies the reusable component inspector. Diagrams and icons are code-native SVG; no graphics or audio dependency is needed.
 
 Review explanations against the supported Kubernetes version and installed implementations. Example manifests contain placeholders and assumed application endpoints; adapt and validate them in staging before use. Commands with optional resource kinds require those APIs to be installed.
 

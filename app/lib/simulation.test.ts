@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readyBackends, scenarios, simulate } from "./simulation.ts";
+import {
+  readyBackends,
+  scenarios,
+  simulate,
+  zoneReadyCounts,
+} from "./simulation.ts";
 test("a failed endpoint cannot continue to count as a ready backend", () => {
   assert.equal(simulate("pod-failure", 0, false).ready, 5);
   assert.equal(simulate("pod-failure", 6, false).ready, 6);
@@ -35,6 +40,22 @@ test("every scenario remains bounded at phase transitions and invalid time input
       assert.ok(s.ready >= 0 && s.ready <= s.desired);
       assert.ok(s.pending >= 0);
       assert.ok(s.nodes >= 0);
+    }
+  }
+});
+
+test("visible primary Pods match totals and never occupy a failed zone", () => {
+  for (const scenario of scenarios) {
+    for (const time of [0, 4, 5, 8, 9, 10, 12]) {
+      const s = simulate(scenario.id, time, true);
+      const placement = zoneReadyCounts(s);
+      assert.equal(
+        placement.reduce((sum, ready) => sum + ready, 0),
+        s.ready,
+      );
+      if (s.failedZone !== null) assert.equal(placement[s.failedZone], 0);
+      if (s.nodes === 0) assert.deepEqual(placement, [0, 0, 0]);
+      assert.ok(placement.every((count) => count >= 0 && count <= 4));
     }
   }
 });

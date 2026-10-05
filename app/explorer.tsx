@@ -735,7 +735,7 @@ function ArchitectureMap({
   );
 }
 
-function Inspector({
+export function Inspector({
   id,
   tab,
   setTab,

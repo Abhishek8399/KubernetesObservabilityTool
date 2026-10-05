@@ -178,3 +178,16 @@ export function simulate(
 export function readyBackends(s: Simulation): number {
   return s.serviceAvailable ? (s.secondaryActive ? 6 : s.ready) : 0;
 }
+
+/** Illustrative placement, kept consistent with the displayed primary count. */
+export function zoneReadyCounts(s: Simulation): [number, number, number] {
+  if (s.nodes === 0) return [0, 0, 0];
+  const active = [0, 1, 2].filter((zone) => zone !== s.failedZone);
+  return [0, 1, 2].map((zone) => {
+    const rank = active.indexOf(zone);
+    return rank < 0
+      ? 0
+      : Math.floor(s.ready / active.length) +
+          (rank < s.ready % active.length ? 1 : 0);
+  }) as [number, number, number];
+}

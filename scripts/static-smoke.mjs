@@ -33,6 +33,11 @@ for (const marker of [
   "NetworkPolicy",
   "Kubernetes Observatory",
   "dependency-outage",
+  "THE LIVING ARCHITECTURE",
+  "Enable sound",
+  "COMPONENT FIELD NOTES",
+  "FAILURE LABORATORY",
+  "Build the platform",
 ])
   assert.ok(js.includes(marker), `Missing content: ${marker}`);
 assert.ok(css.includes("prefers-reduced-motion"));

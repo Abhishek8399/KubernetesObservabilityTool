@@ -1,5 +1,17 @@
 import type { SVGProps } from "react";
 const paths: Record<string, React.ReactNode> = {
+  volume: (
+    <>
+      <path d="m11 4-6 5H2v6h3l6 5V4Z" />
+      <path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" />
+    </>
+  ),
+  mute: (
+    <>
+      <path d="m11 4-6 5H2v6h3l6 5V4Z" />
+      <path d="m16 9 5 6m0-6-5 6" />
+    </>
+  ),
   cube: (
     <>
       <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />

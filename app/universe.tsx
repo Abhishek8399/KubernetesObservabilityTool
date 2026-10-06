@@ -489,6 +489,8 @@ export default function Universe() {
         diagramOnly={diagramOnly}
         reducedMotion={reducedMotion}
         onSpatialView={recordSpatialView}
+        paused={paused}
+        onTogglePaused={() => setPaused((value) => !value)}
         onCamera={manualCamera}
         flight={
           journeyStep
@@ -576,7 +578,7 @@ export default function Universe() {
           <em>Into Kubernetes.</em>
         </h1>
         <p>
-          Learn each decision. Build your understanding.
+          Hover to learn a component’s role. Click to explore it.
           <br />
           See what changes when something fails.
         </p>
@@ -726,51 +728,6 @@ export default function Universe() {
           <Icon name="chevron" size={13} />
         </button>
       </aside>
-      <div className="camera-tools" aria-label="Camera and playback controls">
-        <button
-          onClick={() =>
-            manualCamera({ ...camera, zoom: Math.min(3.4, camera.zoom + 0.15) })
-          }
-          aria-label="Zoom in"
-        >
-          +
-        </button>
-        <span>{Math.round(camera.zoom * 100)}%</span>
-        <button
-          onClick={() =>
-            manualCamera({
-              ...camera,
-              zoom: Math.max(0.65, camera.zoom - 0.15),
-            })
-          }
-          aria-label="Zoom out"
-        >
-          −
-        </button>
-        <span className="tool-divider" />
-        <button
-          onClick={() => {
-            manualCamera(home);
-            setSceneEpoch((value) => value + 1);
-          }}
-          aria-label="Reset camera"
-          title="Reset camera"
-        >
-          <Icon name="expand" size={16} />
-        </button>
-        <button
-          onClick={() => setPaused((v) => !v)}
-          aria-label={
-            paused
-              ? "Resume simulation and motion"
-              : "Pause simulation and motion"
-          }
-          aria-pressed={paused}
-          title={paused ? "Resume" : "Pause"}
-        >
-          <Icon name={paused ? "play" : "pause"} size={15} />
-        </button>
-      </div>
       {journey && journeyStep && (
         <FlightDeck
           mission={journey}

@@ -18,6 +18,13 @@ import {
 } from "./data/world";
 import { getColor, conceptById } from "./data/concepts";
 import { visiblePods } from "./lib/lab";
+import { Icon } from "./icons";
+import {
+  placeLabels,
+  readableName,
+  type SceneLabel,
+  type LabelBox,
+} from "./lib/scene-labels";
 import {
   defaultOrbit,
   spatialPlanes,
@@ -31,6 +38,7 @@ import {
   viewportCamera,
   focusDistance,
   mixVector,
+  zoomDistance,
   type Vector3,
   type Perspective,
   type Orbit,
@@ -342,6 +350,13 @@ export default function SpatialScene(p: SceneProps) {
     [isolated, setIsolated] = useState<string | null>(null);
   const [viewport, setViewport] = useState(() => viewportCamera(1200, 700));
   const [labels, setLabels] = useState(true);
+  const [hovered, setHovered] = useState<{
+    label: string;
+    role: string;
+    state: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [dragMode, setDragMode] = useState<"orbit" | "pan">("orbit");
   const [overview, setOverview] = useState<string | null>(
     p.guided === false ? (p.flight?.stopKey ?? "overview") : null,
@@ -360,6 +375,7 @@ export default function SpatialScene(p: SceneProps) {
     id: string;
     label: string;
     state: string;
+    inspect: boolean;
   } | null>(null);
   const focusAnimation = useRef<number | null>(null);
   const drag = useRef<{
@@ -388,23 +404,7 @@ export default function SpatialScene(p: SceneProps) {
     },
     [p.flight?.stopKey],
   );
-  const { camera: manualCamera, onCamera } = p;
-  useEffect(() => {
-    const element = svg.current;
-    if (!element) return;
-    function wheel(event: WheelEvent) {
-      event.preventDefault();
-      onCamera({
-        ...manualCamera,
-        zoom: Math.max(
-          0.65,
-          Math.min(3.4, manualCamera.zoom - event.deltaY * 0.002),
-        ),
-      });
-    }
-    element.addEventListener("wheel", wheel, { passive: false });
-    return () => element.removeEventListener("wheel", wheel);
-  }, [manualCamera, onCamera]);
+  const { onCamera } = p;
   const planeFocus = spatialPlanes.find(
     (plane) => plane.id === isolated && (!p.flight || p.guided === false),
   );
@@ -531,6 +531,7 @@ export default function SpatialScene(p: SceneProps) {
       );
       const zoom = p.camera.zoom;
       const started = performance.now();
+      setHovered(null);
       onCamera(p.camera);
       setOverview(null);
       setIsolated(null);
@@ -547,6 +548,7 @@ export default function SpatialScene(p: SceneProps) {
           id,
           label,
           state,
+          inspect: true,
         });
         focusAnimation.current = t < 1 ? requestAnimationFrame(tick) : null;
       };
@@ -562,11 +564,78 @@ export default function SpatialScene(p: SceneProps) {
       orbit.separation,
     ],
   );
+  const zoomScene = useCallback(
+    (initial: { target: Vector3; distance: number }, factor: number) => {
+      if (focusAnimation.current !== null)
+        cancelAnimationFrame(focusAnimation.current);
+      focusAnimation.current = null;
+      const distance = zoomDistance(initial.distance, factor);
+      const zoom = 1670 / distance;
+      setOverview(null);
+      setFocus({
+        key: focusKey,
+        target: initial.target,
+        distance,
+        zoom,
+        separation: orbit.separation,
+        id: activeFocus?.id ?? p.flight?.node ?? "nodes",
+        label: activeFocus?.label ?? "Architecture",
+        state: activeFocus?.state ?? "ready",
+        inspect: activeFocus?.inspect ?? false,
+      });
+      setPan({ x: activePan.x, y: activePan.y, key: focusKey });
+      onCamera({ x: 0, y: 0, zoom });
+    },
+    [
+      focusKey,
+      orbit.separation,
+      activeFocus,
+      activePan.x,
+      activePan.y,
+      p.flight?.node,
+      onCamera,
+    ],
+  );
+  useEffect(() => {
+    const element = svg.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const delta =
+        event.deltaY *
+        (event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? viewport.height
+            : 1);
+      zoomScene(
+        {
+          target: {
+            x: camera.target.x,
+            y: camera.target.y,
+            z: camera.target.z,
+          },
+          distance: camera.distance,
+        },
+        Math.exp(Math.max(-250, Math.min(250, delta)) * 0.002),
+      );
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, [
+    camera.target.x,
+    camera.target.y,
+    camera.target.z,
+    camera.distance,
+    viewport.height,
+    zoomScene,
+  ]);
   function movePan(x: number, y: number) {
     onCamera(p.camera);
     setPan({ x: activePan.x + x, y: activePan.y + y, key: focusKey });
   }
   function resetView() {
+    setHovered(null);
     setOverview(focusKey);
     if (focusAnimation.current !== null)
       cancelAnimationFrame(focusAnimation.current);
@@ -590,6 +659,12 @@ export default function SpatialScene(p: SceneProps) {
     return step < (thresholds[id] ?? 0);
   };
   const items: { key: string; depth: number; element: ReactNode }[] = [];
+  const labelCandidates: SceneLabel[] = [];
+  const labelObstacles: LabelBox[] = [];
+  const labelResources = new Map<
+    string,
+    { id: string; label: string; point: Vector3; state: string; role: string }
+  >();
   const add = (key: string, position: Vector3, element: ReactNode) =>
     items.push({ key, depth: project(position, camera).depth, element });
   const conceptId = (id: string) =>
@@ -623,8 +698,18 @@ export default function SpatialScene(p: SceneProps) {
         data.state,
       );
   }
+  function handleResourceHover(event: PointerEvent<SVGGElement>) {
+    const data = event.currentTarget.dataset;
+    setHovered({
+      label: readableName(data.label ?? "Resource"),
+      role: data.role ?? "",
+      state: data.state ?? "ready",
+      x: Math.max(12, Math.min(window.innerWidth - 300, event.clientX + 16)),
+      y: Math.max(12, Math.min(window.innerHeight - 145, event.clientY + 16)),
+    });
+  }
   const focusResource = (id: string) =>
-    activeFocus?.id === conceptId(id) ||
+    (activeFocus?.inspect && activeFocus.id === conceptId(id)) ||
     p.selected === conceptId(id) ||
     p.focus === conceptId(id) ||
     p.highlights.includes(conceptId(id));
@@ -663,15 +748,57 @@ export default function SpatialScene(p: SceneProps) {
       activeIsolation &&
       activeIsolation !== planeId &&
       !(activeIsolation === "foundation" && id.startsWith("node-"));
+    const dimmed =
+      hidden ||
+      (p.layer !== "all" &&
+        conceptById[conceptId(id)]?.layer !== p.layer &&
+        !active);
+    labelObstacles.push({
+      x: q.x - 38 * q.scale,
+      y: Math.min(q.y, top.y) - 18 * q.scale,
+      width: 76 * q.scale,
+      height: Math.abs(q.y - top.y) + 32 * q.scale,
+    });
+    if (
+      !dimmed &&
+      (!planned(id) || active) &&
+      (id !== "pods" || camera.distance < 1000 || state !== "ready")
+    ) {
+      labelResources.set(id + label, {
+        id: conceptId(id),
+        label,
+        point: pos,
+        state,
+        role: conceptById[conceptId(id)]?.summary ?? sub,
+      });
+      labelCandidates.push({
+        id: id + label,
+        text: readableName(label),
+        color: tint,
+        x: q.x,
+        y: q.y,
+        above: Math.min(q.y, top.y) - 18 * q.scale,
+        priority:
+          unavailable || state === "starting" || state === "pending"
+            ? 100
+            : active
+              ? 90
+              : id === "pods"
+                ? 20
+                : 60,
+      });
+    }
     add(
       id + label,
       pos,
       <g
         role="button"
         tabIndex={0}
-        aria-label={`Focus ${label}: ${state}. Open resource details from the focus toolbar.`}
+        aria-label={`Focus ${label}: ${state}. ${sub || conceptById[conceptId(id)]?.summary || ""}. Open resource details from the focus toolbar.`}
         onClick={selectResource}
         onKeyDown={handleResourceKey}
+        onPointerEnter={handleResourceHover}
+        onPointerLeave={() => setHovered(null)}
         className={`spatial-resource ${active ? "spatial-active" : ""}`}
         opacity={
           hidden
@@ -688,6 +815,7 @@ export default function SpatialScene(p: SceneProps) {
         data-concept-id={conceptId(id)}
         data-state={state}
         data-label={label}
+        data-role={conceptById[conceptId(id)]?.summary ?? sub}
         data-x={pos.x}
         data-y={pos.y}
         data-z={pos.z}
@@ -789,25 +917,6 @@ export default function SpatialScene(p: SceneProps) {
             textAnchor="middle"
           >
             ×
-          </text>
-        )}
-        <text
-          x={q.x}
-          y={q.y + 29}
-          textAnchor="middle"
-          className="spatial-label"
-          fill={tint}
-        >
-          {label}
-        </text>
-        {sub && (
-          <text
-            x={q.x}
-            y={q.y + 44}
-            textAnchor="middle"
-            className="spatial-sub"
-          >
-            {sub}
           </text>
         )}
       </g>,
@@ -913,6 +1022,7 @@ export default function SpatialScene(p: SceneProps) {
             y={label.y + 22}
             className="spatial-plane-label"
             fill={plane.color}
+            display={activeIsolation === plane.id ? undefined : "none"}
           >
             {plane.title}
           </text>
@@ -1188,9 +1298,6 @@ export default function SpatialScene(p: SceneProps) {
                 fill="none"
                 stroke="#e6fff8"
               />
-              <text y="-48" textAnchor="middle">
-                {conceptById[p.flight.node]?.title.toUpperCase()}
-              </text>
             </g>
             <FlightShip
               from={from}
@@ -1201,8 +1308,79 @@ export default function SpatialScene(p: SceneProps) {
             />
           </g>
         )}
+        {labels && (
+          <g className="spatial-labels" aria-hidden="true">
+            {placeLabels(
+              labelCandidates,
+              viewport.width,
+              viewport.height,
+              labelObstacles,
+            ).map((label) => (
+              <g
+                key={label.id}
+                className="spatial-nameplate"
+                data-label={label.text}
+                data-role={labelResources.get(label.id)?.role}
+                data-state={labelResources.get(label.id)?.state}
+                onPointerEnter={handleResourceHover}
+                onPointerLeave={() => setHovered(null)}
+                onClick={() => {
+                  const resource = labelResources.get(label.id);
+                  if (resource && !drag.current?.moved)
+                    focusAt(
+                      camera,
+                      resource.id,
+                      resource.label,
+                      resource.point,
+                      resource.state,
+                    );
+                }}
+              >
+                <path
+                  d={`M${label.x} ${label.y + 9}L${label.box.x + label.box.width / 2} ${label.box.y > label.y ? label.box.y : label.box.y + label.box.height}`}
+                  stroke="#668897"
+                  strokeWidth=".8"
+                  opacity=".6"
+                  fill="none"
+                  pointerEvents="none"
+                />
+                <rect
+                  x={label.box.x}
+                  y={label.box.y}
+                  width={label.box.width}
+                  height={label.box.height}
+                  rx="6"
+                  fill="#081b28"
+                  fillOpacity=".94"
+                  stroke={label.color}
+                  strokeOpacity=".28"
+                />
+                <text
+                  x={label.box.x + label.box.width / 2}
+                  y={label.box.y + 16}
+                  textAnchor="middle"
+                  className="spatial-label"
+                  fill={label.color}
+                >
+                  {label.text}
+                </text>
+              </g>
+            ))}
+          </g>
+        )}
       </svg>
-      {activeFocus && labels && (
+      {hovered && labels && (
+        <aside
+          className="spatial-hover-card"
+          style={{ left: hovered.x, top: hovered.y }}
+          role="status"
+        >
+          <strong>{hovered.label}</strong>
+          <p>{hovered.role}</p>
+          <small>{hovered.state.toUpperCase()} · Click to explore</small>
+        </aside>
+      )}
+      {activeFocus?.inspect && labels && (
         <aside className="spatial-focus-readout" aria-live="polite">
           <span>RESOURCE IN FOCUS · {activeFocus.state.toUpperCase()}</span>
           <strong>{activeFocus.label}</strong>
@@ -1240,7 +1418,7 @@ export default function SpatialScene(p: SceneProps) {
             {labels ? "Hide labels" : "Show labels"}
           </button>
         </div>
-        {activeFocus && (
+        {activeFocus?.inspect && (
           <button onClick={() => p.onSelect(activeFocus.id)}>
             Explain focused resource
           </button>
@@ -1265,7 +1443,10 @@ export default function SpatialScene(p: SceneProps) {
             Reset view
           </button>
         </div>
-        <p>Drag to orbit · shift-drag to pan · scroll to zoom</p>
+        <p>
+          Drag to orbit · shift-drag to pan · scroll to zoom. Hover a name or
+          model to learn its role. Names appear where there is space.
+        </p>
         <label>
           Rotate{" "}
           <input
@@ -1339,6 +1520,44 @@ export default function SpatialScene(p: SceneProps) {
             "Layers explain responsibilities; these are not separate required clusters. Control and data planes share APIs and infrastructure."}
         </small>
       </details>
+      <div className="camera-tools" aria-label="Camera and playback controls">
+        <button
+          aria-label="Zoom in"
+          onClick={() => zoomScene(camera, 1 / 1.2)}
+          disabled={camera.distance <= 200}
+        >
+          +
+        </button>
+        <span>{Math.round((1670 / camera.distance) * 100)}%</span>
+        <button
+          aria-label="Zoom out"
+          onClick={() => zoomScene(camera, 1.2)}
+          disabled={camera.distance >= 8000}
+        >
+          −
+        </button>
+        <span className="tool-divider" />
+        <button
+          aria-label="Reset camera"
+          title="Return to the whole architecture"
+          onClick={resetView}
+        >
+          <Icon name="expand" size={16} />
+        </button>
+        {p.onTogglePaused && (
+          <button
+            aria-label={
+              p.paused
+                ? "Resume simulation and motion"
+                : "Pause simulation and motion"
+            }
+            aria-pressed={p.paused}
+            onClick={p.onTogglePaused}
+          >
+            <Icon name={p.paused ? "play" : "pause"} size={15} />
+          </button>
+        )}
+      </div>
     </>
   );
 }

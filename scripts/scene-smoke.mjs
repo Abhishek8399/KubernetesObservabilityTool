@@ -356,6 +356,10 @@ try {
   assert.ok(firstView.includes("Hide labels"));
   assert.ok(firstView.includes("Pan left"));
   assert.ok(firstView.includes("Focus API SERVER"));
+  assert.ok(firstView.includes('class="spatial-nameplate"'));
+  assert.ok(!firstView.includes('class="spatial-sub"'));
+  assert.equal(occurrences(firstView, 'aria-label="Zoom out"'), 1);
+  assert.equal(occurrences(firstView, 'aria-label="Reset camera"'), 1);
   assert.ok(courseDeck.includes("Focus this stage"));
   assert.ok(courseDeck.includes("Watch this stage"));
   assert.ok(courseDeck.includes('id="visible-flight-stop"'));

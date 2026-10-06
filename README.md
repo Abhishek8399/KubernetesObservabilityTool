@@ -46,6 +46,8 @@ The ship, curved course, destination marker and guided camera share the same 3D 
 
 Choose **Diagram only** to hide the learning panels and introductory text without losing the current stop. **Show learning panels** restores them. Open **Camera & labels** to hide diagram labels independently, switch between orbit and pan, pan in four directions, tilt above or below a platform, or separate and isolate the layers. Shift-drag pans and the scroll wheel zooms. Clicking a resource or platform makes an animated close-up; **Explain this resource** opens its detailed popup. Reset returns the spatial camera, pan, zoom and isolation to the overview.
 
+Names are placed in a separate screen-space layer and avoid other names and the model footprints. Descriptions appear on hover rather than beneath every object. Healthy Pod names are reserved for close-ups; failed or starting Pods retain priority. Nameplates can be clicked to focus their model. Platform titles appear when that layer is isolated. The zoom buttons and wheel change actual camera distance, share the same limits, and can pull back from any close-up; the percentage reflects the 3D view rather than the retained isometric renderer's zoom. The overview toolbar is positioned above the journey dock so the dock cannot cover its buttons.
+
 On desktop, the lesson occupies a separate right rail while the architecture retains its own unobstructed viewport. On narrow screens, the diagram appears above the scrollable lesson. The stage selector, live simulated readiness counts, **Watch this stage**, and **Focus this stage** connect the story to its visible resources. Diagram-only mode retains previous/next/refocus controls; understanding checks remain required to advance the application course.
 
 - Choose **Request** to fly with a request. The camera pulls back, follows a travelling ship, and moves in at each destination. DNS discovery is distinguished from HTTP forwarding; a separate return leg carries the response back to the client.
@@ -55,6 +57,8 @@ On desktop, the lesson occupies a separate right rail while the architecture ret
 - The **71-stop expedition** visits the complete library. A component popup also has **Fly to this resource**. API objects without a dedicated map object appear as logical close-ups at their owning resource, not additional physical servers.
 - Manual camera movement pauses guided travel. **Resume flight** restores the camera guide. Reduced-motion preferences replace camera travel with immediate destination changes.
 - An original, slow piano-only soundtrack uses struck-string harmonics, acoustic decay, gentle broken chords and spacious stereo reverb. It is enabled at 45% by default, with volume and mute available in both learning and diagram-only modes. Browsers require a first click or keypress to start audio. Muting suspends the audio device; resuming reuses the device and one score timer. No existing film score or recording is included. Piano samples are cached locally and all voices are stopped when the app closes.
+
+The reverb impulse uses the audio device's exact sample rate, as required by the [ConvolverNode buffer specification](https://webaudio.github.io/web-audio-api/#dom-convolvernode-buffer). Tests enforce that requirement at 48 kHz and 44.1 kHz and verify that a failed initialization can be retried without leaving a half-ready audio graph. Piano note buffers can use a lower rate because AudioBufferSourceNode resamples them for playback.
 
 ## Deploy later
 

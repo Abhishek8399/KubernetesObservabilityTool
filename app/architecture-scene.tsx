@@ -52,6 +52,8 @@ export type SceneProps = {
   diagramOnly?: boolean;
   reducedMotion?: boolean;
   onSpatialView?: (view: SpatialView) => void;
+  paused?: boolean;
+  onTogglePaused?: () => void;
   flight?: {
     visual: FlightVisual | null;
     destination: Point;

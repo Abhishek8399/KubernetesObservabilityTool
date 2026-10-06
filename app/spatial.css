@@ -15,12 +15,11 @@
 }
 .spatial-label {
   font:
-    600 11px "Space Grotesk",
+    500 12px "Space Grotesk",
     sans-serif;
-  letter-spacing: 0.6px;
-  paint-order: stroke;
-  stroke: #06121c;
-  stroke-width: 3px;
+  letter-spacing: 0;
+  stroke: none;
+  pointer-events: none;
 }
 .spatial-sub {
   font:
@@ -208,9 +207,6 @@
   }
   .has-flight .spatial-tools button {
     font-size: 9px;
-  }
-  .spatial-label {
-    font-size: 13px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -12,6 +12,7 @@ import {
   viewportCamera,
   focusDistance,
   spatialPlanes,
+  zoomDistance,
 } from "./spatial.ts";
 const camera = {
   ...defaultOrbit,
@@ -19,6 +20,25 @@ const camera = {
   distance: 1670,
   center: { x: 850, y: 430 },
 };
+test("zoom out escapes every close-up and buttons and wheel share reversible distance scaling", () => {
+  for (const start of [200, focusDistance(1260, 660), 630, 1670, 3600]) {
+    let distance = start;
+    for (let click = 0; click < 12; click++)
+      distance = zoomDistance(distance, 1.2);
+    assert.ok(
+      distance >= 1670,
+      "zoom-out cannot be trapped at a close-up scale",
+    );
+    const out = zoomDistance(start, 1.2);
+    if (out < 8000)
+      assert.ok(Math.abs(zoomDistance(out, 1 / 1.2) - start) < 1e-6);
+    const wheel = zoomDistance(start, Math.exp(0.15));
+    assert.ok(Math.abs(zoomDistance(wheel, Math.exp(-0.15)) - start) < 1e-6);
+  }
+  assert.equal(zoomDistance(1670, NaN), 1670);
+  assert.equal(zoomDistance(200, 0.2), 200);
+  assert.equal(zoomDistance(8000, 2), 8000);
+});
 test("every library resource and application stop has a finite perspective location", () => {
   for (const id of [
     ...concepts.map((c) => c.id),

@@ -23,6 +23,12 @@ export interface SpatialView {
   separation: number;
   pan: Point;
 }
+/** Zoom the actual 3D distance, so every close-up can return to the overview. */
+export function zoomDistance(distance: number, factor: number) {
+  const current = Number.isFinite(distance) && distance > 0 ? distance : 1670;
+  const scale = Number.isFinite(factor) && factor > 0 ? factor : 1;
+  return Math.max(200, Math.min(8000, current * scale));
+}
 export function viewportCamera(width: number, height: number) {
   const w = Number.isFinite(width) ? Math.max(240, width) : 1200;
   const h = Number.isFinite(height) ? Math.max(200, height) : 700;

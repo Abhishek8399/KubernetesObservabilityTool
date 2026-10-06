@@ -33,33 +33,46 @@ export class Soundscape {
     // A mute or unmount while resume is pending must not restart the soundtrack.
     if (generation !== this.generation || context !== this.context) return;
     if (!this.master) {
-      this.master = context.createGain();
-      this.master.gain.value = this.volume;
-      this.master.connect(context.destination);
-      const filter = context.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 5200;
-      filter.Q.value = 0.3;
-      const reverb = context.createConvolver();
-      const rate = Math.min(context.sampleRate, 24000);
-      const impulse = context.createBuffer(2, Math.ceil(rate * 3.2), rate);
-      let seed = 73991;
-      for (let channel = 0; channel < 2; channel++) {
-        const data = impulse.getChannelData(channel);
-        for (let i = 0; i < data.length; i++) {
-          seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-          data[i] = ((seed / 4294967296) * 2 - 1) * Math.exp((-i / rate) * 2.3);
+      const created: AudioNode[] = [];
+      try {
+        const master = context.createGain();
+        created.push(master);
+        master.gain.value = this.volume;
+        const filter = context.createBiquadFilter();
+        created.push(filter);
+        filter.type = "lowpass";
+        filter.frequency.value = 5200;
+        filter.Q.value = 0.3;
+        const reverb = context.createConvolver();
+        created.push(reverb);
+        // ConvolverNode requires the impulse to match its AudioContext exactly.
+        const rate = context.sampleRate;
+        const impulse = context.createBuffer(2, Math.ceil(rate * 3.2), rate);
+        let seed = 73991;
+        for (let channel = 0; channel < 2; channel++) {
+          const data = impulse.getChannelData(channel);
+          for (let i = 0; i < data.length; i++) {
+            seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+            data[i] =
+              ((seed / 4294967296) * 2 - 1) * Math.exp((-i / rate) * 2.3);
+          }
         }
+        reverb.buffer = impulse;
+        const wet = context.createGain();
+        created.push(wet);
+        wet.gain.value = 0.22;
+        filter.connect(master);
+        filter.connect(reverb);
+        reverb.connect(wet);
+        wet.connect(master);
+        master.connect(context.destination);
+        this.master = master;
+        this.musicBus = filter;
+        this.effects = [filter, reverb, wet];
+      } catch (error) {
+        for (const node of created) node.disconnect();
+        throw error;
       }
-      reverb.buffer = impulse;
-      const wet = context.createGain();
-      wet.gain.value = 0.22;
-      filter.connect(this.master);
-      filter.connect(reverb);
-      reverb.connect(wet);
-      wet.connect(this.master);
-      this.musicBus = filter;
-      this.effects = [filter, reverb, wet];
     }
     if (this.enabled) return;
     this.enabled = true;

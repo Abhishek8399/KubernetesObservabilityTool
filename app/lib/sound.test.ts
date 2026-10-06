@@ -10,12 +10,14 @@ test("piano requires a gesture, respects mute, reuses its device, and closes cle
     buffers = 0,
     stops = 0;
   let holdResume = false;
+  let deviceRate = 48000;
+  let rejectReverb = false;
   let releaseResume: (() => void) | undefined;
   class Device {
     state = "suspended";
     currentTime = 0;
     destination = {};
-    sampleRate = 8000;
+    sampleRate = deviceRate;
     constructor() {
       devices++;
     }
@@ -33,20 +35,35 @@ test("piano requires a gesture, respects mute, reuses its device, and closes cle
       this.state = "closed";
       closes++;
     }
-    createBuffer(channels: number, length: number) {
+    createBuffer(channels: number, length: number, sampleRate: number) {
       buffers++;
       const data = Array.from(
         { length: channels },
         () => new Float32Array(length),
       );
       return {
+        sampleRate,
         getChannelData(channel: number) {
           return data[channel];
         },
       };
     }
     createConvolver() {
-      return { buffer: null, connect() {}, disconnect() {} };
+      const rate = this.sampleRate;
+      return {
+        set buffer(value: { sampleRate: number } | null) {
+          if (value && value.sampleRate !== rate)
+            throw new Error(
+              "Convolver buffer sample rate must match the context.",
+            );
+          if (rejectReverb) {
+            rejectReverb = false;
+            throw new Error("Reverb initialization failed.");
+          }
+        },
+        connect() {},
+        disconnect() {},
+      };
     }
     createBufferSource() {
       return {
@@ -103,6 +120,13 @@ test("piano requires a gesture, respects mute, reuses its device, and closes cle
       "muting while audio unlock is pending cannot start the score",
     );
     holdResume = false;
+    rejectReverb = true;
+    await assert.rejects(sound.enable(), /Reverb initialization failed/);
+    assert.equal(
+      notes,
+      0,
+      "failed initialization cannot leave a half-ready soundtrack",
+    );
     await sound.enable();
     assert.equal(devices, 1);
     assert.ok(notes > 0);
@@ -135,6 +159,16 @@ test("piano requires a gesture, respects mute, reuses its device, and closes cle
     sound.play("step");
     assert.equal(closes, 1);
     assert.equal(stops, notes, "closing stops every remaining piano source");
+    deviceRate = 44100;
+    const otherDevice = new Soundscape();
+    const beforeOtherDevice = notes;
+    await otherDevice.enable();
+    assert.ok(
+      notes > beforeOtherDevice,
+      "44.1 kHz devices also start the piano",
+    );
+    await otherDevice.close();
+    assert.equal(stops, notes);
   } finally {
     if (previous) Object.defineProperty(globalThis, "window", previous);
     else Reflect.deleteProperty(globalThis, "window");

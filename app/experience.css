@@ -1,4 +1,47 @@
 /* Reserve real space for the architecture instead of covering it with the lesson. */
+.scene-first .camera-tools {
+  z-index: 30;
+}
+.scene-first:not(.has-flight) .camera-tools {
+  bottom: 145px;
+}
+.scene-first:not(.has-flight) .spatial-tools {
+  bottom: 195px;
+  right: 34px;
+}
+.spatial-nameplate {
+  cursor: zoom-in;
+}
+.spatial-nameplate:hover rect {
+  stroke-opacity: 0.85;
+}
+.spatial-hover-card {
+  position: fixed;
+  z-index: 48;
+  width: 280px;
+  padding: 14px 16px;
+  border: 1px solid #789da771;
+  border-radius: 12px;
+  background: #0b202ff5;
+  box-shadow: 0 12px 32px #0005;
+  pointer-events: none;
+}
+.spatial-hover-card strong {
+  font-size: 14px;
+  color: #daf3e9;
+  font-weight: 500;
+}
+.spatial-hover-card p {
+  margin: 8px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #afc9d0;
+}
+.spatial-hover-card small {
+  font: 9px monospace;
+  letter-spacing: 0.6px;
+  color: #90bcb3;
+}
 .universe.scene-first.diagram-only {
   min-height: 0;
   height: 100dvh;

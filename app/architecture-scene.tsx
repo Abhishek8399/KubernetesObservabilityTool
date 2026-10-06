@@ -23,7 +23,12 @@ import {
 
 import { explainConnection } from "./data/connections";
 import type { FlightVisual } from "./use-flight-camera";
-import { flightPoint, isLogicalStop, type Point } from "./lib/flight";
+import {
+  flightPoint,
+  isLogicalStop,
+  panCamera,
+  type Point,
+} from "./lib/flight";
 import { visiblePods, type LabFrame } from "./lib/lab";
 
 export interface Camera {
@@ -462,17 +467,12 @@ export default function ArchitectureScene(props: SceneProps) {
   function pointerMove(e: PointerEvent<SVGSVGElement>) {
     if (!drag.current) return;
     const d = drag.current;
-    onCamera({
-      ...camera,
-      x: Math.max(
-        -850,
-        Math.min(850, d.camera.x + (e.clientX - d.x) * d.ratio),
-      ),
-      y: Math.max(
-        -650,
-        Math.min(650, d.camera.y + (e.clientY - d.y) * d.ratio),
-      ),
-    });
+    onCamera(
+      panCamera(d.camera, {
+        x: (e.clientX - d.x) * d.ratio,
+        y: (e.clientY - d.y) * d.ratio,
+      }),
+    );
   }
   return (
     <svg

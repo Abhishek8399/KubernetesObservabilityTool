@@ -5,6 +5,7 @@ import {
   flightMission,
   flightPose,
   focusedCamera,
+  panCamera,
   resourceAnchor,
   screenPoint,
   failureFlight,
@@ -62,6 +63,17 @@ test("request flight distinguishes DNS discovery and shows an explicit return to
   assert.ok(returning.length >= 4);
   assert.equal(returning.at(-1)?.node, "clients");
   assert.ok(!steps.some((s) => ["api", "etcd", "scheduler"].includes(s.node)));
+});
+test("dragging after a close-up cannot snap the camera back to the old overview bounds", () => {
+  for (const c of concepts) {
+    const destination = resourceAnchor(c.id),
+      before = focusedCamera(destination);
+    const dragged = panCamera(before, { x: 1, y: -2 });
+    const point = screenPoint(destination, dragged);
+    assert.ok(Math.abs(point.x - 901) < 0.000001, c.id);
+    assert.ok(Math.abs(point.y - 518) < 0.000001, c.id);
+    assert.equal(dragged.zoom, before.zoom);
+  }
 });
 test("failure camera stops are synchronized with real modeled state changes and explicit repairs", () => {
   const pod = failureFlight("pod-failure", false, false);

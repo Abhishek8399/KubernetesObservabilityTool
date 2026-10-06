@@ -119,6 +119,12 @@ export function screenPoint(point: Point, camera: FlightCamera): Point {
     y: camera.y + 580 + (point.y - 580) * camera.zoom,
   };
 }
+export function panCamera(camera: FlightCamera, delta: Point): FlightCamera {
+  if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y)) return camera;
+  // Cinematic close-ups extend beyond the old overview limits. Keep drag relative
+  // to the current view; the overview button always provides a way home.
+  return { ...camera, x: camera.x + delta.x, y: camera.y + delta.y };
+}
 export function boundedProgress(value: number) {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }

@@ -4,13 +4,67 @@ A vendor-neutral, interactive Kubernetes architecture explorer for engineers, te
 
 **Website:** https://abhishek8399.github.io/KubernetesObservabilityTool/
 
+## Run the full local app
+
+Use Node 24 LTS and the locked dependencies:
+
+```sh
+npm ci
+npm run dev:local
+```
+
+Open **http://127.0.0.1:5180/**. This single command starts the React frontend and the Node simulation backend. Both bind to localhost. The frontend forwards `/api` requests to the backend on port 8788.
+
+For the built app, one server serves the frontend and API together:
+
+```sh
+npm run build:local
+npm run start:local
+```
+
+Open **http://127.0.0.1:8788/**. The local build always uses `/` as its asset base, independently of the GitHub Pages build.
+
+The frontend runs smooth, finite camera flights. The backend owns versioned, isolated simulation sessions and computes the Pod, endpoint, outage, and repair state at each stop. Sessions are in memory, expire after 30 minutes without activity, and disappear on server restart. This is an educational simulator; it does not connect to or modify a Kubernetes cluster. On GitHub Pages, the same interface uses the browser simulator because Pages cannot host the Node backend.
+
+## Start with your own application
+
+The primary launch opens **From my application to Kubernetes**, a guided story with 20 milestones. It starts with your frontend and API container inventory, then covers cluster ownership, namespace, Deployment, API admission, controllers, scheduling, node startup, readiness, Service discovery, frontend routing, configuration, credentials, external routing, resources, scaling, observability, Pod loss, releases, and recovery.
+
+Each milestone has three sections: **Understand**, **Check understanding**, and **Practice in a sandbox**. Answering correctly unlocks the next milestone. Checked answers are stored in your browser; returning to the application journey resumes at the first unchecked milestone. Direct destination selection remains available for review.
+
+The scene starts with zero application Pods. It shows two starting API replicas after controller reconciliation, ready replicas after readiness, serving endpoints after the Service, and four ready API/frontend replicas with separate Service selectors at the frontend milestone. Planned resources are dimmed until their stage. The examples describe a chosen sandbox cluster; this app does not provision one.
+
+Understanding checks measure conceptual learning. The final practice plan asks for real sandbox evidence, including deployment, routing, failures, scaling, rollback, and restore. Completion is not a claim of production expertise, and the app does not run the displayed kubectl commands.
+
+## Cinematic voyages
+
+- Choose **Request** to fly with a request. The camera pulls back, follows a travelling ship, and moves in at each destination. DNS discovery is distinguished from HTTP forwarding; a separate return leg carries the response back to the client.
+- Each stop explains **why the resource exists** and **what happens here**. Pause to read, move forward/backward, choose any stop from the flight plan, or open the resource popup.
+- Run a failure to travel through its impact, controller response, placement, readiness, and outcome. The camera and resource state advance together; dependency and policy outages require an explicit simulated repair.
+- Open the incident controls during a failure flight to repair, replay, adjust playback speed, or configure the independently designed standby. Exploring the map preserves the current incident state and pauses the lesson.
+- The **71-stop expedition** visits the complete library. A component popup also has **Fly to this resource**. API objects without a dedicated map object appear as logical close-ups at their owning resource, not additional physical servers.
+- Manual camera movement pauses guided travel. **Resume flight** restores the camera guide. Reduced-motion preferences replace camera travel with immediate destination changes.
+- A quiet Matrix-inspired continuous synthesized soundtrack with soft minor-key pads, sparse electronic notes, and filtered echo is enabled at 45% by default, with a volume slider and mute. Browsers require a first click or keypress to start audio. Muting suspends the audio device; resuming does not create duplicate background voices.
+
+## Deploy later
+
+The included container serves the frontend and API together as an unprivileged user. Build and run locally with Docker Compose:
+
+```sh
+docker compose up --build
+```
+
+Open http://127.0.0.1:8788/. The Compose configuration publishes only to localhost, removes Linux capabilities, and uses a read-only filesystem. The container health endpoint is `/api/health`.
+
+For hosting, place this image behind HTTPS and decide whether the educational sessions should be public or access-controlled. `HOST` defaults to `127.0.0.1` for a direct Node process; the container explicitly binds `0.0.0.0`. `PORT` defaults to 8788. The current session store is deliberately single-process and ephemeral; persistence or multiple replicas require a shared store. A deployed container image should pin the approved base-image digest in the deployment release.
+
 ## Explore
 
 - A full-screen dimensional architecture world with raised platforms, server towers, illuminated connections, moving request particles, pan, zoom, and keyboard-accessible components.
 - Click-to-open component popups with explanations, illustrative configuration, diagnostics, related concepts, and bookmarks. Details do not occupy a permanent sidebar.
-- Optional, quiet interaction sounds synthesized locally with Web Audio. Sound starts muted and requires the reader to enable it.
+- Optional, quiet interaction sounds synthesized locally with Web Audio. The background soundtrack is enabled by default and starts after the first browser interaction. A slider adjusts volume and the speaker button mutes it.
 - A searchable library of 71 concepts with explanations, configuration examples, diagnostics, and official documentation links.
-- Four guided journeys: request lifecycle, release deployment, scaling, and recovery.
+- Four core guided flights plus the complete 71-stop expedition: request lifecycle, release deployment, scaling, and recovery.
 - Eight illustrative system scenarios, including Pod, zone, and regional failure, blocked networking, and dependency outages.
 - Four-stage failure lessons with immediate visible impact, named Pod states, readiness-based endpoint branches, controller activity, playback speed, pause, chapter stepping, scrubbing, and replay. Playback stops at the end; opening details freezes lesson time.
 - Clickable connections explain actual responsibilities, discovery metadata, request paths, and control relationships. Larger labels and three introductory questions make the diagram easier to approach.
@@ -45,7 +99,7 @@ PUBLIC_BASE_PATH=/KubernetesObservabilityTool/ npm run smoke:static
 
 The checks cover TypeScript, ESLint, concept/graph integrity, separation of request and control paths, visible Pod placement during failures, finite lesson timing, simulated repair boundaries, and the static artifact's content, assets, and base path. `npm run smoke:scene` also renders the actual React SVG and lesson controls to verify lost/starting/ready Pods, failed zones, endpoint withdrawal, scaling, rollout versions, explicit repair, and standby states. These checks do not substitute for browser visual or interaction testing.
 
-For a manual interaction check: click a component or connection; switch its Understand/Configure/Diagnose tabs; close with Escape; search the library; run a guided request; enable and mute sound; lose a Pod and inspect C2 lost → starting → replacement ready; lose zone B and observe its routes disappear; step through the chapters; scrub and replay; verify playback stops at 28 lesson seconds; restore a dependency or allow the required policy flow; run regional failure with and without standby; check a narrow viewport and reduced-motion preferences. Web Audio needs a supported browser and an explicit user gesture.
+For a manual interaction check: click a component or connection; switch its Understand/Configure/Diagnose tabs; close with Escape; search the library; run a guided request; adjust and mute the background soundtrack; lose a Pod and inspect C2 lost → starting → replacement ready; lose zone B and observe its routes disappear; step through the chapters; scrub and replay; verify playback stops at 28 lesson seconds; restore a dependency or allow the required policy flow; run regional failure with and without standby; check a narrow viewport and reduced-motion preferences. Web Audio needs a supported browser and an explicit user gesture.
 
 ## Publish
 
@@ -55,7 +109,7 @@ GitHub Pages uses the repository-specific `/KubernetesObservabilityTool/` base p
 
 ## Content and maintenance
 
-Concepts are in `app/data/concepts.ts`, journeys in `app/data/journeys.ts`, illustrative manifests in `app/data/examples.ts`, and scenario behavior in `app/lib/simulation.ts`. The finite teaching timeline and visible Pod identities are in `app/lib/lab.ts`, its controls in `app/lab-console.tsx`, and connection explanations in `app/data/connections.ts`. The full-screen interface is in `app/universe.tsx`, scene geometry in `app/architecture-scene.tsx`, connections in `app/data/world.ts`, styles in `app/universe.css` and `app/lessons.css`, and sound generation in `app/lib/sound.ts`. The previous explorer supplies the reusable component inspector. Diagrams and icons are code-native SVG; no graphics or audio dependency is needed.
+Concepts are in `app/data/concepts.ts`, journeys in `app/data/journeys.ts`, illustrative manifests in `app/data/examples.ts`, and scenario behavior in `app/lib/simulation.ts`. The finite teaching timeline and visible Pod identities are in `app/lib/lab.ts`, its controls in `app/lab-console.tsx`, and connection explanations in `app/data/connections.ts`. The full-screen interface is in `app/universe.tsx`, scene geometry in `app/architecture-scene.tsx`, connections in `app/data/world.ts`, styles in `app/universe.css`, `app/lessons.css`, and `app/flight.css`, and sound generation in `app/lib/sound.ts`. Flight courses and camera geometry are in `app/lib/flight.ts`, camera playback in `app/use-flight-camera.ts`, the cockpit in `app/flight-deck.tsx`, backend synchronization in `app/use-simulation-backend.ts`, and session/API handling in `server/`. The previous explorer supplies the reusable component inspector. Diagrams and icons are code-native SVG; no graphics or audio dependency is needed.
 
 Review explanations against the supported Kubernetes version and installed implementations. Example manifests contain placeholders and assumed application endpoints; adapt and validate them in staging before use. Commands with optional resource kinds require those APIs to be installed.
 

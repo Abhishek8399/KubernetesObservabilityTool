@@ -5,6 +5,7 @@ import "./explorer.css";
 import "./polish.css";
 import "./universe.css";
 import "./lessons.css";
+import "./flight.css";
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Explorer />

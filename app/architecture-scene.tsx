@@ -22,6 +22,8 @@ import {
 } from "./lib/simulation";
 
 import { explainConnection } from "./data/connections";
+import type { FlightVisual } from "./use-flight-camera";
+import { flightPoint, isLogicalStop, type Point } from "./lib/flight";
 import { visiblePods, type LabFrame } from "./lib/lab";
 
 export interface Camera {
@@ -40,6 +42,13 @@ type SceneProps = {
   motion: boolean;
   recovery: boolean;
   camera: Camera;
+  flight?: {
+    visual: FlightVisual | null;
+    destination: Point;
+    node: string;
+    phase: string;
+    stopKey: string;
+  };
   onCamera: (camera: Camera) => void;
   onSelect: (id: string) => void;
   onConnection: (link: WorldLink) => void;
@@ -409,6 +418,19 @@ export default function ArchitectureScene(props: SceneProps) {
     onSelect,
   } = props;
   const regionLost = s.nodes === 0;
+  const creationAt: Record<string, number> = {
+    deployment: 4,
+    pods: 5,
+    service: 9,
+    gateway: 13,
+    loadbalancer: 13,
+    waf: 13,
+    hpa: 15,
+    observability: 16,
+    pvc: 19,
+  };
+  const planned = (id: string) =>
+    !!props.lab.learning && (creationAt[id] ?? 0) > props.lab.learning.step;
   const actorActive = (id: string) =>
     props.highlights.includes(id) || focus === id;
   useEffect(() => {
@@ -419,7 +441,7 @@ export default function ArchitectureScene(props: SceneProps) {
       event.preventDefault();
       onCamera({
         ...camera,
-        zoom: Math.max(0.65, Math.min(2, camera.zoom - event.deltaY * 0.002)),
+        zoom: Math.max(0.65, Math.min(3.4, camera.zoom - event.deltaY * 0.002)),
       });
     };
     element.addEventListener("wheel", zoom, { passive: false });
@@ -523,7 +545,12 @@ export default function ArchitectureScene(props: SceneProps) {
         </text>
         <g className="world-connections">
           {worldLinks
-            .filter((link) => !(link.from === "service" && link.to === "pods"))
+            .filter(
+              (link) =>
+                !(link.from === "service" && link.to === "pods") &&
+                !planned(link.from) &&
+                !planned(link.to),
+            )
             .map((link, index) => {
               const a = coordinates[link.from],
                 b = coordinates[link.to],
@@ -631,98 +658,113 @@ export default function ArchitectureScene(props: SceneProps) {
           aria-label="Service backends selected by readiness"
         >
           {[810, 1100, 1390].flatMap((x, zone) =>
-            visiblePods(props.scenario, props.lab, zone).map((pod) => {
-              const px = pod.slot % 2 === 0 ? 16 : 78,
-                py = pod.slot < 2 ? -4 : 44;
-              const targetX = x + px,
-                targetY = 835 + py - 25;
-              const serving =
-                pod.state === "ready" &&
-                !flowDenied(
-                  { from: "service", to: "pods", kind: "traffic" },
-                  props.scenario,
-                  s,
-                );
-              const d = `M965 512C965 665 ${targetX} 685 ${targetX} ${targetY}`;
-              return (
-                <g
-                  key={pod.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Explain Service endpoint ${pod.id}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() =>
-                    props.onConnection({
-                      from: "service",
-                      to: "pods",
-                      kind: "traffic",
-                    })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
+            visiblePods(props.scenario, props.lab, zone)
+              .filter(() => !planned("service"))
+              .map((pod) => {
+                const px = pod.slot % 2 === 0 ? 16 : 78,
+                  py = pod.slot < 2 ? -4 : 44;
+                const targetX = x + px,
+                  targetY = 835 + py - 25;
+                const serving =
+                  pod.state === "ready" &&
+                  !flowDenied(
+                    { from: "service", to: "pods", kind: "traffic" },
+                    props.scenario,
+                    s,
+                  );
+                const frontend =
+                  !!props.lab.learning && !["A1", "B1"].includes(pod.id);
+                const startX = frontend ? 1090 : 965,
+                  startY = frontend ? 615 : 512;
+                const d = `M${startX} ${startY}C${startX} 665 ${targetX} 685 ${targetX} ${targetY}`;
+                return (
+                  <g
+                    key={pod.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Explain ${frontend ? "frontend" : props.lab.learning ? "API" : "application"} Service endpoint ${pod.id}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() =>
                       props.onConnection({
                         from: "service",
                         to: "pods",
                         kind: "traffic",
-                      });
+                      })
                     }
-                  }}
-                  data-endpoint={pod.id}
-                  data-state={
-                    serving
-                      ? "serving"
-                      : pod.state === "ready"
-                        ? "blocked"
-                        : "withdrawn"
-                  }
-                >
-                  <title>{`${pod.id}: ${serving ? "Ready endpoint receives requests" : "Not eligible for this request path"}`}</title>
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke="transparent"
-                    strokeWidth="13"
-                    className="wire-hit-target"
-                  />
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke={
-                      serving
-                        ? "#79dcbf"
-                        : pod.state === "starting" || pod.state === "pending"
-                          ? "#f0c27a"
-                          : "#f5849e"
-                    }
-                    strokeOpacity={serving ? 0.5 : 0.24}
-                    strokeWidth={serving ? 2 : 1.5}
-                    strokeDasharray={serving ? undefined : "5 9"}
-                  />
-                  {serving && motion && (
-                    <circle r="3" fill="#b5f7d7">
-                      <animateMotion
-                        path={d}
-                        dur={props.scenario === "traffic-spike" ? "1.4s" : "3s"}
-                        repeatCount="indefinite"
-                        begin={`${-pod.slot * 0.6 - zone * 0.8}s`}
-                      />
-                    </circle>
-                  )}
-                  {!serving && (
-                    <path
-                      d={`M${targetX - 6} ${targetY - 6}l12 12m0-12-12 12`}
-                      stroke={
-                        pod.state === "pending" || pod.state === "starting"
-                          ? "#efc57c"
-                          : "#f5849e"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        props.onConnection({
+                          from: "service",
+                          to: "pods",
+                          kind: "traffic",
+                        });
                       }
-                      strokeWidth="2"
+                    }}
+                    data-endpoint={pod.id}
+                    data-service-owner={
+                      props.lab.learning
+                        ? frontend
+                          ? "frontend"
+                          : "api"
+                        : undefined
+                    }
+                    data-state={
+                      serving
+                        ? "serving"
+                        : pod.state === "ready"
+                          ? "blocked"
+                          : "withdrawn"
+                    }
+                  >
+                    <title>{`${pod.id}: ${serving ? "Ready endpoint receives requests" : "Not eligible for this request path"}`}</title>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth="13"
+                      className="wire-hit-target"
                     />
-                  )}
-                </g>
-              );
-            }),
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={
+                        serving
+                          ? "#79dcbf"
+                          : pod.state === "starting" || pod.state === "pending"
+                            ? "#f0c27a"
+                            : "#f5849e"
+                      }
+                      strokeOpacity={serving ? 0.5 : 0.24}
+                      strokeWidth={serving ? 2 : 1.5}
+                      strokeDasharray={serving ? undefined : "5 9"}
+                    />
+                    {serving && motion && (
+                      <circle r="3" fill="#b5f7d7">
+                        <animateMotion
+                          path={d}
+                          dur={
+                            props.scenario === "traffic-spike" ? "1.4s" : "3s"
+                          }
+                          repeatCount="indefinite"
+                          begin={`${-pod.slot * 0.6 - zone * 0.8}s`}
+                        />
+                      </circle>
+                    )}
+                    {!serving && (
+                      <path
+                        d={`M${targetX - 6} ${targetY - 6}l12 12m0-12-12 12`}
+                        stroke={
+                          pod.state === "pending" || pod.state === "starting"
+                            ? "#efc57c"
+                            : "#f5849e"
+                        }
+                        strokeWidth="2"
+                      />
+                    )}
+                  </g>
+                );
+              }),
           )}
         </g>
         {worldNodes
@@ -737,6 +779,7 @@ export default function ArchitectureScene(props: SceneProps) {
               !s.serviceAvailable;
             return (
               <g
+                data-provisioning={planned(n.id) ? "planned" : "created"}
                 data-component={n.id}
                 data-state={
                   failed ? "unavailable" : blocked ? "denying" : "available"
@@ -744,7 +787,7 @@ export default function ArchitectureScene(props: SceneProps) {
                 key={n.id}
                 transform={`translate(${n.x} ${n.y})`}
                 {...selectable(n.id, conceptById[n.id].title, onSelect)}
-                className={`scene-object ${current ? "object-active" : ""} ${faded ? "object-faded" : ""} ${failed ? "object-failed" : ""}`}
+                className={`scene-object ${planned(n.id) ? "resource-planned" : ""} ${current ? "object-active" : ""} ${faded ? "object-faded" : ""} ${failed ? "object-failed" : ""}`}
                 style={{ "--object-color": getColor(n.layer) } as CSSProperties}
               >
                 <title>
@@ -840,7 +883,9 @@ export default function ArchitectureScene(props: SceneProps) {
                   textAnchor="middle"
                   className="object-title"
                 >
-                  {n.label}
+                  {props.lab.learning && n.id === "service"
+                    ? "API SERVICE"
+                    : n.label}
                 </text>
                 <text
                   y={n.id === "dr" ? 100 : 66}
@@ -938,6 +983,13 @@ export default function ArchitectureScene(props: SceneProps) {
                     transform={`translate(${px} ${py})`}
                     className={`scene-object pod-artifact pod-${pod.state} ${selected === "pods" || actorActive("pods") ? "object-active" : ""}`}
                     data-pod={pod.id}
+                    data-workload={
+                      props.lab.learning
+                        ? ["A1", "B1"].includes(pod.id)
+                          ? "api"
+                          : "frontend"
+                        : undefined
+                    }
                     data-pod-state={pod.state}
                     data-version={pod.version}
                     {...selectable(
@@ -972,6 +1024,11 @@ export default function ArchitectureScene(props: SceneProps) {
                       <circle cy="-65" r="5" className="pod-status-dot" />
                     </g>
                     <text y="22" textAnchor="middle" className="pod-identity">
+                      {props.lab.learning
+                        ? ["A1", "B1"].includes(pod.id)
+                          ? "API "
+                          : "WEB "
+                        : ""}
                       {pod.id}
                       {pod.replacement ? "?" : ""} ?{" "}
                       {pod.state === "ready"
@@ -1013,6 +1070,74 @@ export default function ArchitectureScene(props: SceneProps) {
             </text>
           </g>
         )}
+        {props.flight && (
+          <FlightCraft flight={props.flight} onSelect={onSelect} />
+        )}
+        {props.lab.learning && props.lab.learning.step >= 10 && (
+          <g
+            transform="translate(1090 603)"
+            className="scene-object"
+            data-component="frontend-service"
+            {...selectable(
+              "service",
+              "Frontend Service: two frontend backends",
+              onSelect,
+            )}
+          >
+            <Artifact shape="orb" layer="network" />
+            <text y="46" textAnchor="middle" className="object-title">
+              FRONTEND SERVICE
+            </text>
+            <text y="66" textAnchor="middle" className="object-sub">
+              Frontend selectors only
+            </text>
+          </g>
+        )}
+        {props.lab.learning && props.lab.learning.step >= 13 && (
+          <g
+            className="world-link traffic"
+            data-course-route="frontend"
+            role="button"
+            tabIndex={0}
+            aria-label="Gateway route to the frontend Service"
+            onClick={() =>
+              props.onConnection({
+                from: "gateway",
+                to: "service",
+                kind: "traffic",
+              })
+            }
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                props.onConnection({
+                  from: "gateway",
+                  to: "service",
+                  kind: "traffic",
+                });
+              }
+            }}
+          >
+            <path
+              d="M745 517C800 560 1010 560 1090 615"
+              fill="none"
+              stroke="transparent"
+              strokeWidth="16"
+            />
+            <path
+              d="M745 517C800 560 1010 560 1090 615"
+              fill="none"
+              stroke="#7de8d4"
+              strokeWidth="2"
+              strokeOpacity=".6"
+            />
+            <title>
+              The implemented gateway routes frontend traffic to the frontend
+              Service; API traffic uses its separate Service.
+            </title>
+          </g>
+        )}
         <g className="world-annotation">
           <text x="97" y="695">
             NORTH–SOUTH TRAFFIC
@@ -1027,5 +1152,122 @@ export default function ArchitectureScene(props: SceneProps) {
         </g>
       </g>
     </svg>
+  );
+}
+
+export function FlightCraft({
+  flight,
+  onSelect,
+}: {
+  flight: NonNullable<SceneProps["flight"]>;
+  onSelect: (id: string) => void;
+}) {
+  const { visual, destination, node, phase } = flight;
+  const color = getColor(conceptById[node].layer);
+  const returning = phase === "Response returns";
+  const from = visual?.from ?? destination;
+  const course = Array.from({ length: 45 }, (_, i) =>
+    flightPoint(from, destination, i / 44),
+  );
+  const trail = visual
+    ? Array.from({ length: 16 }, (_, i) =>
+        flightPoint(
+          from,
+          destination,
+          Math.max(0, visual.travelProgress - i * 0.015),
+        ),
+      )
+    : [];
+  return (
+    <g
+      className={`flight-world ${returning ? "flight-return" : ""}`}
+      data-flight-resource={node}
+      data-flight-phase={visual?.phase ?? "Plotting course"}
+      pointerEvents="none"
+    >
+      <path
+        d={course.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ")}
+        className="flight-course"
+        stroke={returning ? "#ffc891" : color}
+      />
+      <g
+        transform={`translate(${destination.x} ${destination.y})`}
+        className="flight-destination"
+      >
+        <ellipse
+          rx="95"
+          ry="42"
+          cy="40"
+          stroke={color}
+          className="destination-ring"
+        />
+        <ellipse
+          rx="78"
+          ry="34"
+          cy="40"
+          stroke={color}
+          className="destination-ring-inner"
+        />
+        <path
+          d="M-70-80h-20v20M70-80h20v20M-70 76h-20v-20M70 76h20v-20"
+          stroke={color}
+          className="destination-brackets"
+        />
+        {isLogicalStop(node) && (
+          <g
+            className="logical-resource-beacon"
+            pointerEvents="auto"
+            {...selectable(node, conceptById[node].title, onSelect)}
+          >
+            <path d="M0-87v-46" stroke={color} strokeDasharray="3 4" />
+            <rect
+              x="-124"
+              y="-176"
+              width="248"
+              height="43"
+              rx="8"
+              fill="#071c29"
+              stroke={color}
+            />
+            <text y="-149" textAnchor="middle" fill={color}>
+              {conceptById[node].title}
+            </text>
+          </g>
+        )}
+      </g>
+      {visual && (
+        <>
+          {trail.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r={3 - i * 0.13}
+              fill={returning ? "#ffc891" : "#a5fff1"}
+              opacity={(1 - i / 16) * 0.6}
+            />
+          ))}
+          <g
+            transform={`translate(${visual.ship.x} ${visual.ship.y - 12}) rotate(${visual.angle})`}
+            className="flight-ship"
+            data-flight-progress={visual.progress}
+          >
+            <path
+              d="M-20-4L-52 0-20 4"
+              fill={returning ? "#ffc891" : "#76eee6"}
+              className="ship-exhaust"
+            />
+            <path
+              d="M25 0-15-13-8-3-19 0-8 3-15 13Z"
+              fill="#ecffff"
+              stroke="#8fcfcf"
+              strokeWidth="1.4"
+            />
+            <path d="M10 0-6-4-3 0-6 4Z" fill="#1f7188" />
+            <circle cx="-17" cy="0" r="2.4" fill="#fff" />
+          </g>
+        </>
+      )}
+    </g>
   );
 }

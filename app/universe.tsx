@@ -37,6 +37,18 @@ import { labFrame, advanceLab, boundedLabTime, labDuration } from "./lib/lab";
 import { Soundscape } from "./lib/sound";
 import "./universe.css";
 import "./lessons.css";
+import "./flight.css";
+import FlightDeck from "./flight-deck";
+import { flightMission, resourceAnchor } from "./lib/flight";
+import { useSimulationBackend } from "./use-simulation-backend";
+import {
+  applicationFrame,
+  parseUnderstanding,
+  saveUnderstanding,
+  subscribeUnderstanding,
+  understandingSnapshot,
+} from "./lib/learning";
+import { useFlightCamera } from "./use-flight-camera";
 
 type Modal =
   | "connection"
@@ -84,12 +96,18 @@ export default function Universe() {
     [search, setSearch] = useState(""),
     [libraryLayer, setLibraryLayer] = useState<Layer | "all">("all"),
     [savedOnly, setSavedOnly] = useState(false);
+  const [autopilot, setAutopilot] = useState(true),
+    [flightEpoch, setFlightEpoch] = useState(0),
+    [incidentControls, setIncidentControls] = useState(false);
   const [connection, setConnection] = useState<WorldLink | null>(null);
-  const [sound, setSound] = useState(false),
+  const [sound, setSound] = useState(true),
+    [volume, setVolume] = useState(0.45),
     [audioBusy, setAudioBusy] = useState(false),
     [message, setMessage] = useState("");
   const dialog = useRef<HTMLDialogElement>(null),
     audio = useRef<Soundscape | null>(null),
+    audioReady = useRef(false),
+    volumeRef = useRef(volume),
     toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     searchInput = useRef<HTMLInputElement>(null);
   const stored = useSyncExternalStore(
@@ -97,18 +115,56 @@ export default function Universe() {
     bookmarkSnapshot,
     () => "[]",
   );
+  const progressRaw = useSyncExternalStore(
+    subscribeUnderstanding,
+    understandingSnapshot,
+    () => "{}",
+  );
+  const progress = useMemo(
+    () => parseUnderstanding(progressRaw),
+    [progressRaw],
+  );
   const saved = useMemo(() => parseBookmarks(stored, allowedIds), [stored]);
   const reducedMotion = useSyncExternalStore(
     subscribeMotion,
     motionSnapshot,
     () => true,
   );
-  const playbackDone = elapsed >= labDuration;
-  const frame = labFrame(scenario, elapsed, recovery, resolved),
+  const journey = useMemo(
+    () => flightMission(journeyId, recovery, resolved),
+    [journeyId, recovery, resolved],
+  );
+  const journeyStep = journey?.steps[step];
+  const flightTime = journeyStep?.time ?? elapsed;
+  const playbackDone = flightTime >= labDuration;
+  const backend = useSimulationBackend(
+    journeyId,
+    step,
+    recovery,
+    resolved,
+    paused,
+  );
+  const frame =
+      backend.frame ??
+      (journeyId === "application"
+        ? applicationFrame(step)
+        : labFrame(scenario, flightTime, recovery, resolved)),
     sim = frame.simulation,
     backends = readyBackends(sim);
-  const journey = journeys.find((j) => j.id === journeyId),
-    journeyStep = journey?.steps[step];
+  const destination = journeyStep
+    ? (journeyStep.anchor ?? resourceAnchor(journeyStep.node))
+    : undefined;
+  const stopKey = `${journeyId}:${step}:${flightEpoch}`;
+  const flightVisual = useFlightCamera({
+    destination,
+    stopKey,
+    enabled: !!journey && autopilot,
+    paused: paused || !!modal,
+    reducedMotion,
+    camera,
+    onCamera: setCamera,
+  });
+  const flightArrived = flightVisual?.progress === 1;
   const component = selected ? conceptById[selected] : null;
   const visibleConcepts = concepts.filter(
     (c) =>
@@ -129,30 +185,33 @@ export default function Universe() {
       el.querySelector<HTMLButtonElement>("[data-dialog-close]")?.focus();
   }, [modal]);
   useEffect(() => {
-    if (paused || modal || scenario === "healthy" || playbackDone) return;
+    if (paused || modal || journeyId || scenario === "healthy" || playbackDone)
+      return;
     const timer = setInterval(
       () => setElapsed((t) => advanceLab(t, 0.25 * speed)),
       250,
     );
     return () => clearInterval(timer);
-  }, [paused, scenario, modal, speed, playbackDone]);
+  }, [paused, scenario, modal, speed, playbackDone, journeyId]);
   useEffect(() => {
     if (
       !journey ||
       !autoTour ||
+      !autopilot ||
+      !flightArrived ||
       paused ||
       modal ||
       step === journey.steps.length - 1
     )
       return;
-    const timer = setTimeout(() => setStep((s) => s + 1), 7000);
+    const timer = setTimeout(() => setStep((s) => s + 1), 11000 / speed);
     return () => clearTimeout(timer);
-  }, [journey, autoTour, paused, modal, step]);
+  }, [journey, autoTour, autopilot, flightArrived, paused, modal, step, speed]);
   useEffect(() => {
     if (scenario !== "healthy" && frame.index >= 2) audio.current?.play("step");
   }, [scenario, frame.index]);
   useEffect(() => {
-    if (journeyStep) audio.current?.play("step");
+    if (journeyStep) audio.current?.play("flight");
   }, [journeyStep]);
   useEffect(() => {
     const shortcut = (e: KeyboardEvent) => {
@@ -166,17 +225,23 @@ export default function Universe() {
         setModal("library");
       }
       if (e.key === "Escape" && !modal) {
+        setElapsed(flightTime);
+        setPaused(scenario !== "healthy");
         setJourneyId(null);
         setAutoTour(false);
+        setCamera(home);
       }
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
-  }, [modal]);
+  }, [modal, flightTime, scenario]);
   useEffect(
     () => () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
-      audio.current?.close().catch((error: unknown) => {
+      const device = audio.current;
+      audio.current = null;
+      audioReady.current = false;
+      device?.close().catch((error: unknown) => {
         console.warn(
           "Audio device cleanup failed.",
           error instanceof Error ? error.name : "UnknownError",
@@ -185,6 +250,47 @@ export default function Universe() {
     },
     [],
   );
+
+  useEffect(() => {
+    volumeRef.current = volume;
+    audio.current?.setVolume(volume);
+  }, [volume]);
+  useEffect(() => {
+    if (!sound || audioReady.current) return;
+    let active = true;
+    const start = (event: Event) => {
+      if ((event.target as HTMLElement)?.closest?.("[data-audio-mute]")) return;
+      document.removeEventListener("pointerdown", start, true);
+      document.removeEventListener("keydown", start, true);
+      audio.current ??= new Soundscape();
+      audio.current.setVolume(volumeRef.current);
+      setAudioBusy(true);
+      audio.current
+        .enable()
+        .then(async () => {
+          if (active) audioReady.current = true;
+          else await audio.current?.disable();
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setSound(false);
+            setMessage(
+              error instanceof Error ? error.message : "Audio could not start.",
+            );
+          }
+        })
+        .finally(() => {
+          setAudioBusy(false);
+        });
+    };
+    document.addEventListener("pointerdown", start, true);
+    document.addEventListener("keydown", start, true);
+    return () => {
+      active = false;
+      document.removeEventListener("pointerdown", start, true);
+      document.removeEventListener("keydown", start, true);
+    };
+  }, [sound]);
 
   function notify(text: string) {
     setMessage(text);
@@ -211,9 +317,12 @@ export default function Universe() {
       audio.current ??= new Soundscape();
       if (sound) {
         await audio.current.disable();
+        audioReady.current = false;
         setSound(false);
       } else {
+        audio.current.setVolume(volume);
         await audio.current.enable();
+        audioReady.current = true;
         setSound(true);
       }
     } catch (error) {
@@ -234,7 +343,12 @@ export default function Universe() {
     setLayer("all");
     setCamera(home);
     setSelected(null);
-    setJourneyId(null);
+    setJourneyId(id === "healthy" ? null : `lab:${id}`);
+    setStep(0);
+    setAutoTour(true);
+    setAutopilot(true);
+    setFlightEpoch((v) => v + 1);
+    setIncidentControls(false);
     setModal(null);
     audio.current?.play(id === "healthy" ? "select" : "failure");
   }
@@ -243,11 +357,50 @@ export default function Universe() {
     setElapsed(0);
     setResolved(false);
     setJourneyId(id);
-    setStep(0);
-    setAutoTour(false);
+    const firstUnchecked =
+      id === "application"
+        ? flightMission(id)!.steps.findIndex(
+            (s, i) => progress[`application:${i}`] !== s.lesson?.answer,
+          )
+        : 0;
+    setStep(Math.max(0, firstUnchecked));
+    setAutoTour(id !== "application");
+    setPaused(false);
+    setAutopilot(true);
+    setFlightEpoch((v) => v + 1);
+    setIncidentControls(false);
+    setSelected(null);
+    setModal(null);
     setLayer("all");
-    setCamera(home);
     audio.current?.play("select");
+  }
+  function leaveFlight() {
+    setElapsed(flightTime);
+    setJourneyId(null);
+    setAutoTour(false);
+    setCamera(home);
+    setPaused(scenario !== "healthy");
+    setIncidentControls(false);
+  }
+  function chooseFlightStep(value: number) {
+    if (
+      !journey ||
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value >= journey.steps.length
+    )
+      return;
+    setStep(value);
+    setAutopilot(true);
+    setPaused(false);
+    setFlightEpoch((v) => v + 1);
+  }
+  function manualCamera(value: Camera) {
+    setCamera(value);
+    if (journey) {
+      setAutopilot(false);
+      setPaused(true);
+    }
   }
   function resetWorld() {
     setScenario("healthy");
@@ -266,7 +419,7 @@ export default function Universe() {
 
   return (
     <main
-      className={`universe ${scenario !== "healthy" ? "has-lab" : ""} ${journey ? "has-journey" : ""} ${paused || reducedMotion ? "motion-off" : ""}`}
+      className={`universe ${scenario !== "healthy" ? "has-lab" : ""} ${journey ? "has-journey has-flight" : ""} ${journeyId === "application" ? "has-learning" : ""} ${incidentControls ? "show-incident-controls" : ""} ${paused || reducedMotion ? "motion-off" : ""}`}
     >
       <div className="world-vignette" />
       <ArchitectureScene
@@ -286,7 +439,18 @@ export default function Universe() {
         motion={!paused && !reducedMotion && !modal}
         recovery={recovery}
         camera={camera}
-        onCamera={setCamera}
+        onCamera={manualCamera}
+        flight={
+          journeyStep
+            ? {
+                visual: flightVisual,
+                destination: destination!,
+                node: journeyStep.node,
+                phase: journeyStep.phase,
+                stopKey,
+              }
+            : undefined
+        }
         onSelect={select}
         onConnection={(link) => {
           setConnection(link);
@@ -319,7 +483,24 @@ export default function Universe() {
             <span>Explore {concepts.length} concepts</span>
             <kbd>/</kbd>
           </button>
+          <label
+            className="sound-volume"
+            title="Matrix-inspired ambient soundtrack volume"
+          >
+            <span>SOUND</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={Math.round(volume * 100)}
+              onChange={(e) => setVolume(Number(e.target.value) / 100)}
+              aria-label="Background soundtrack volume"
+            />
+            <output>{Math.round(volume * 100)}%</output>
+          </label>
           <button
+            data-audio-mute
             className={`world-icon ${sound ? "sound-enabled" : ""}`}
             onClick={toggleSound}
             disabled={audioBusy}
@@ -328,7 +509,7 @@ export default function Universe() {
             title={
               sound
                 ? "Sound on · click to mute"
-                : "Enable gentle interaction sounds"
+                : "Enable background soundtrack and interaction sounds"
             }
           >
             <Icon name={sound ? "volume" : "mute"} size={19} />
@@ -340,20 +521,23 @@ export default function Universe() {
           <span /> A LIVING SYSTEM, EXPLAINED
         </span>
         <h1>
-          Understand the
+          Your app.
           <br />
-          <em>whole system.</em>
+          <em>Into Kubernetes.</em>
         </h1>
         <p>
-          Follow a request. Watch controllers respond.
+          Learn each decision. Build your understanding.
           <br />
           See what changes when something fails.
         </p>
-        <button onClick={() => beginJourney("request")} className="intro-link">
+        <button
+          onClick={() => beginJourney("application")}
+          className="intro-link"
+        >
           <span className="tiny-play">
             <Icon name="play" size={12} />
           </span>
-          Follow your first request
+          Start with your own application
           <Icon name="arrow" size={15} />
         </button>
         <div className="intro-meta">
@@ -368,16 +552,12 @@ export default function Universe() {
           speed={speed}
           recovery={recovery}
           onSeek={(time) => {
+            leaveFlight();
             setElapsed(boundedLabTime(time));
             setPaused(true);
             setResolved(false);
           }}
-          onReplay={() => {
-            setElapsed(4);
-            setResolved(false);
-            setPaused(false);
-            audio.current?.play("failure");
-          }}
+          onReplay={() => changeScenario(scenario)}
           onPause={() => setPaused((v) => !v)}
           onSpeed={(value) => {
             if ([0.5, 1, 2].includes(value)) setSpeed(value);
@@ -385,11 +565,19 @@ export default function Universe() {
           onRepair={() => {
             setResolved(true);
             setElapsed(22);
+            if (journey) {
+              setStep(journey.steps.length - 1);
+              setFlightEpoch((v) => v + 1);
+            }
             setPaused(false);
             audio.current?.play("step");
           }}
           onRecovery={(enabled) => {
             setRecovery(enabled);
+            if (journey) {
+              setStep(0);
+              setFlightEpoch((v) => v + 1);
+            }
             setElapsed(4);
             setPaused(false);
           }}
@@ -491,7 +679,7 @@ export default function Universe() {
       <div className="camera-tools" aria-label="Camera and playback controls">
         <button
           onClick={() =>
-            setCamera({ ...camera, zoom: Math.min(2, camera.zoom + 0.15) })
+            manualCamera({ ...camera, zoom: Math.min(3.4, camera.zoom + 0.15) })
           }
           aria-label="Zoom in"
         >
@@ -500,7 +688,10 @@ export default function Universe() {
         <span>{Math.round(camera.zoom * 100)}%</span>
         <button
           onClick={() =>
-            setCamera({ ...camera, zoom: Math.max(0.65, camera.zoom - 0.15) })
+            manualCamera({
+              ...camera,
+              zoom: Math.max(0.65, camera.zoom - 0.15),
+            })
           }
           aria-label="Zoom out"
         >
@@ -508,7 +699,7 @@ export default function Universe() {
         </button>
         <span className="tool-divider" />
         <button
-          onClick={() => setCamera(home)}
+          onClick={() => manualCamera(home)}
           aria-label="Reset camera"
           title="Reset camera"
         >
@@ -528,83 +719,96 @@ export default function Universe() {
         </button>
       </div>
       {journey && journeyStep && (
-        <section
-          className="journey-console"
-          aria-label="Guided architecture journey"
-        >
-          <div className="journey-progress">
-            {journey.steps.map((s, i) => (
-              <button
-                key={i}
-                onClick={() => setStep(i)}
-                className={i === step ? "active" : i < step ? "complete" : ""}
-                aria-label={`Step ${i + 1}: ${s.title}`}
-                aria-current={i === step ? "step" : undefined}
-              />
-            ))}
-          </div>
-          <div className="journey-topline">
-            <span>
-              {journey.label}{" "}
-              <b>
-                {String(step + 1).padStart(2, "0")} /{" "}
-                {String(journey.steps.length).padStart(2, "0")}
-              </b>
-            </span>
-            <button
-              onClick={() => {
-                setJourneyId(null);
-                setAutoTour(false);
-              }}
-              aria-label="Close journey"
-            >
-              <Icon name="close" size={15} />
-            </button>
-          </div>
-          <h2>{journeyStep.title}</h2>
-          <p>{journeyStep.body}</p>
-          <div className="journey-controls">
-            <button onClick={() => select(journeyStep.node)}>
-              <Icon name="layers" size={14} />
-              Open component
-            </button>
-            <div>
-              <button
-                disabled={step === 0}
-                onClick={() => setStep((s) => s - 1)}
-                aria-label="Previous journey step"
-              >
-                ←
-              </button>
-              <button
-                aria-label={
-                  autoTour ? "Stop automatic tour" : "Start automatic tour"
-                }
-                aria-pressed={autoTour}
-                onClick={() => {
-                  if (step === journey.steps.length - 1) setStep(0);
-                  setAutoTour((v) => !v);
-                }}
-              >
-                <Icon
-                  name={
-                    autoTour && step < journey.steps.length - 1
-                      ? "pause"
-                      : "play"
-                  }
-                  size={14}
-                />
-              </button>
-              <button
-                disabled={step === journey.steps.length - 1}
-                onClick={() => setStep((s) => s + 1)}
-                aria-label="Next journey step"
-              >
-                →
-              </button>
-            </div>
-          </div>
-        </section>
+        <FlightDeck
+          mission={journey}
+          step={step}
+          visual={flightVisual}
+          paused={paused}
+          auto={autoTour && step < journey.steps.length - 1}
+          autopilot={autopilot}
+          engine={
+            backend.available && !backend.error
+              ? "Local simulation engine"
+              : "Browser simulation"
+          }
+          engineError={backend.available ? backend.error : ""}
+          checked={
+            journeyStep.lesson
+              ? progress[`application:${step}`] === journeyStep.lesson.answer
+              : true
+          }
+          completed={
+            Object.entries(progress).filter(([key, answer]) => {
+              const i = Number(key.split(":")[1]);
+              return (
+                journeyId === "application" &&
+                journey.steps[i]?.lesson?.answer === answer
+              );
+            }).length
+          }
+          onAnswer={(choice) => {
+            if (
+              journeyStep.lesson &&
+              choice === journeyStep.lesson.answer &&
+              !saveUnderstanding({
+                ...progress,
+                [`application:${step}`]: choice,
+              })
+            )
+              notify(
+                "Understanding check saved for this session; browser storage is unavailable.",
+              );
+          }}
+          onExample={() => {
+            select(journeyStep.node);
+            setTab("configure");
+          }}
+          onFailure={() => setModal("scenarios")}
+          onCourse={() => beginJourney("application")}
+          reducedMotion={reducedMotion}
+          ready={sim.ready}
+          desired={sim.desired}
+          backends={backends}
+          onStep={chooseFlightStep}
+          onClose={leaveFlight}
+          onOverview={leaveFlight}
+          onInspect={select}
+          onLab={() => setIncidentControls((v) => !v)}
+          onPlay={() => {
+            if (journeyStep.lesson) {
+              if (
+                progress[`application:${step}`] !== journeyStep.lesson.answer
+              ) {
+                notify(
+                  "Complete this milestone's understanding check before continuing.",
+                );
+                return;
+              }
+              if (step < journey.steps.length - 1) chooseFlightStep(step + 1);
+              else
+                notify(
+                  "Understanding journey complete. Continue with the sandbox evidence plan in Practice.",
+                );
+              return;
+            }
+            if (!autopilot) {
+              setAutopilot(true);
+              setFlightEpoch((v) => v + 1);
+              setPaused(false);
+              setAutoTour(true);
+            } else if (
+              paused ||
+              !autoTour ||
+              step === journey.steps.length - 1
+            ) {
+              if (step === journey.steps.length - 1) chooseFlightStep(0);
+              setAutoTour(true);
+              setPaused(false);
+            } else {
+              setPaused(true);
+            }
+          }}
+        />
       )}
       <div className="world-dock">
         <span className="dock-label">TRACE THE SYSTEM</span>
@@ -621,6 +825,18 @@ export default function Universe() {
             </button>
           ))}
         </div>
+        <button
+          className="dock-expedition"
+          onClick={() => beginJourney("application")}
+        >
+          Application journey
+        </button>
+        <button
+          className="dock-expedition"
+          onClick={() => beginJourney("grand-tour")}
+        >
+          <Icon name="orbit" size={16} /> 71-stop expedition
+        </button>
         <span className="dock-divider" />
         <button className="dock-build" onClick={() => setModal("migration")}>
           <Icon name="terminal" size={17} />
@@ -747,6 +963,12 @@ export default function Universe() {
                 <br />
                 Find the failure boundary.
               </p>
+              <button
+                className="component-fly"
+                onClick={() => beginJourney(`visit:${component.id}`)}
+              >
+                <Icon name="arrow" size={16} /> Fly to this resource
+              </button>
               <span className="component-stage-note">
                 VENDOR-NEUTRAL FIELD NOTES
               </span>
@@ -764,6 +986,12 @@ export default function Universe() {
         )}
         {modal === "library" && (
           <div className="library-popup">
+            <button
+              className="component-fly"
+              onClick={() => beginJourney("grand-tour")}
+            >
+              <Icon name="orbit" size={16} /> Start the 71-stop expedition
+            </button>
             <div className="modal-intro">
               <span className="world-eyebrow">EXPLORE THE COMPLETE SYSTEM</span>
               <h2>
@@ -988,9 +1216,10 @@ export default function Universe() {
               automatically.
             </p>
             <p>
-              Sounds are generated locally after you enable them. Saved concepts
-              stay in your browser. This app has no cluster credentials,
-              deployment actions, or live infrastructure connection.
+              The background soundtrack starts with your first interaction.
+              Adjust its volume or mute it at any time. Saved concepts stay in
+              your browser. This app has no cluster credentials, deployment
+              actions, or live infrastructure connection.
             </p>
             <button
               className="world-button"

@@ -24,9 +24,19 @@ try {
   const { default: Scene } = await vite.ssrLoadModule(
     "/app/architecture-scene.tsx",
   );
+  const { flightMission, resourceAnchor, flightPose } =
+    await vite.ssrLoadModule("/app/lib/flight.ts");
+  const { default: Deck } = await vite.ssrLoadModule("/app/flight-deck.tsx");
+  const { FlightCraft } = await vite.ssrLoadModule(
+    "/app/architecture-scene.tsx",
+  );
+  const { applicationFrame } = await vite.ssrLoadModule("/app/lib/learning.ts");
   const { labFrame } = await vite.ssrLoadModule("/app/lib/lab.ts");
   const render = (scenario, time, recovery = false, resolved = false) => {
-    const lab = labFrame(scenario, time, recovery, resolved);
+    const lab =
+      scenario === "application"
+        ? applicationFrame(time)
+        : labFrame(scenario, time, recovery, resolved);
     return renderToStaticMarkup(
       React.createElement(Scene, {
         scenario,
@@ -46,6 +56,33 @@ try {
     );
   };
   const occurrences = (text, marker) => text.split(marker).length - 1;
+  assert.equal(occurrences(render("application", 0), 'data-pod="'), 0);
+  assert.equal(
+    occurrences(render("application", 5), 'data-pod-state="starting"'),
+    2,
+  );
+  assert.equal(
+    occurrences(render("application", 8), 'data-state="serving"'),
+    0,
+  );
+  assert.equal(
+    occurrences(render("application", 9), 'data-state="serving"'),
+    2,
+  );
+  assert.equal(
+    occurrences(render("application", 10), 'data-pod-state="ready"'),
+    4,
+  );
+  assert.match(
+    render("application", 0),
+    /data-provisioning="planned" data-component="deployment"/,
+  );
+  const splitServices = render("application", 10);
+  assert.equal(occurrences(splitServices, 'data-service-owner="api"'), 2);
+  assert.equal(occurrences(splitServices, 'data-service-owner="frontend"'), 2);
+  assert.ok(splitServices.includes("FRONTEND SERVICE"));
+  assert.ok(!splitServices.includes('data-course-route="frontend"'));
+  assert.ok(render("application", 13).includes('data-course-route="frontend"'));
   const lost = render("pod-failure", 4),
     starting = render("pod-failure", 12),
     restored = render("pod-failure", 22);
@@ -130,10 +167,110 @@ try {
   assert.ok(consoleMarkup.includes("FINISHED"));
   assert.ok(consoleMarkup.includes("Replay any point in the lesson"));
   assert.ok(consoleMarkup.includes('value="0.5" selected=""'));
+  const mission = flightMission("request");
+  const stop = mission.steps.at(-1);
+  const destination = resourceAnchor(stop.node);
+  const pose = flightPose(
+    { x: 0, y: 0, zoom: 1 },
+    resourceAnchor("loadbalancer"),
+    destination,
+    1,
+  );
+  const visual = {
+    ...pose,
+    from: resourceAnchor("loadbalancer"),
+    to: destination,
+    key: "return",
+  };
+  const craft = renderToStaticMarkup(
+    React.createElement(
+      "svg",
+      null,
+      React.createElement(FlightCraft, {
+        flight: {
+          visual,
+          destination,
+          node: stop.node,
+          phase: stop.phase,
+          stopKey: "return",
+        },
+        onSelect() {},
+      }),
+    ),
+  );
+  assert.ok(craft.includes('data-flight-resource="clients"'));
+  assert.ok(craft.includes('data-flight-progress="1"'));
+  assert.ok(craft.includes("flight-return"));
+  const deck = renderToStaticMarkup(
+    React.createElement(Deck, {
+      checked: true,
+      completed: 0,
+      onAnswer() {},
+      onExample() {},
+      onFailure() {},
+      onCourse() {},
+      mission,
+      step: mission.steps.length - 1,
+      visual,
+      paused: false,
+      auto: false,
+      autopilot: true,
+      reducedMotion: false,
+      engine: "Local simulation engine",
+      engineError: "",
+      ready: 6,
+      desired: 6,
+      backends: 6,
+      onStep() {},
+      onPlay() {},
+      onClose() {},
+      onInspect() {},
+      onOverview() {},
+      onLab() {},
+    }),
+  );
+  assert.ok(deck.includes("WHY THIS RESOURCE EXISTS"));
+  assert.ok(deck.includes("WHAT HAPPENS AT THIS STOP"));
+  assert.ok(deck.includes("Expedition complete"));
+  assert.ok(deck.includes("RESPONSE RETURNS"));
+  const course = flightMission("application");
+  const courseDeck = renderToStaticMarkup(
+    React.createElement(Deck, {
+      mission: course,
+      step: 3,
+      visual: null,
+      paused: false,
+      auto: false,
+      autopilot: true,
+      reducedMotion: false,
+      engine: "Local simulation engine",
+      engineError: "",
+      ready: 0,
+      desired: 0,
+      backends: 0,
+      checked: false,
+      completed: 0,
+      onAnswer() {},
+      onExample() {},
+      onFailure() {},
+      onCourse() {},
+      onStep() {},
+      onPlay() {},
+      onClose() {},
+      onInspect() {},
+      onOverview() {},
+      onLab() {},
+    }),
+  );
+  assert.ok(courseDeck.includes("Check understanding"));
+  assert.ok(courseDeck.includes("Maintain") || courseDeck.includes("maintain"));
+  assert.match(courseDeck, /class="flight-play" disabled=""/);
   const { default: Universe } = await vite.ssrLoadModule("/app/universe.tsx");
   const firstView = renderToStaticMarkup(React.createElement(Universe));
   assert.ok(firstView.includes("What changes when a Pod fails?"));
   assert.ok(firstView.includes("Explain connection:"));
+  assert.ok(firstView.includes("Background soundtrack volume"));
+  assert.ok(firstView.includes("71-stop expedition"));
   assert.equal(diagnostics.length, 0, diagnostics[0]?.slice(0, 250));
   console.log(
     "Rendered SVG verified: lost and starting Pod, zone outage, withdrawn routes, capacity growth, rollout versions, explicit repairs and independent standby.",

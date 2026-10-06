@@ -169,6 +169,12 @@ export const labChapters: Record<Exclude<Scenario, "healthy">, LabChapter[]> = {
   ],
 };
 export interface LabFrame {
+  learning?: {
+    step: number;
+    desired: number;
+    ready: number;
+    serviceAvailable: boolean;
+  };
   index: number;
   chapter: LabChapter;
   simulation: Simulation;
@@ -265,6 +271,16 @@ export function visiblePods(
   const s = frame.simulation,
     count = zoneReadyCounts(s)[zone],
     offline = s.nodes === 0 || s.failedZone === zone;
+  if (frame.learning) {
+    const capacity = Math.floor(s.desired / 3) + (zone < s.desired % 3 ? 1 : 0);
+    return Array.from({ length: capacity }, (_, slot) => ({
+      id: `${String.fromCharCode(65 + zone)}${slot + 1}`,
+      slot,
+      state: slot < count ? "ready" : "starting",
+      version: "v1",
+      replacement: false,
+    }));
+  }
   const capacity =
     scenario === "traffic-spike" && frame.index > 0
       ? 4

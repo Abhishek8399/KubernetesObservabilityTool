@@ -13,11 +13,15 @@
     "start": "wrangler dev --config dist/server/wrangler.json --local --ip 127.0.0.1",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern dist-static --ignore-pattern .next --ignore-pattern .vinext --ignore-pattern .wrangler",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test app/data/*.test.ts app/lib/*.test.ts",
+    "test": "node --experimental-strip-types --test app/data/*.test.ts app/lib/*.test.ts server/*.test.ts",
     "smoke": "node scripts/smoke.mjs",
     "smoke:static": "node scripts/static-smoke.mjs",
     "check": "npm run typecheck && npm run lint && npm test && npm run smoke:scene && npm run build:static && npm run smoke:static",
-    "smoke:scene": "node scripts/scene-smoke.mjs"
+    "smoke:scene": "node scripts/scene-smoke.mjs",
+    "dev:local": "node scripts/dev-local.mjs",
+    "server": "node --experimental-strip-types server/index.ts",
+    "build:local": "node scripts/build-local.mjs",
+    "start:local": "node --experimental-strip-types server/index.ts"
   },
   "dependencies": {
     "next": "16.3.6",

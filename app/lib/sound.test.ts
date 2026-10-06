@@ -6,7 +6,8 @@ test("sound requires opt-in, respects mute, reuses its device, and closes cleanl
   const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
   let devices = 0,
     notes = 0,
-    closes = 0;
+    closes = 0,
+    ambientStarts = 0;
   class Device {
     state = "suspended";
     currentTime = 0;
@@ -30,12 +31,25 @@ test("sound requires opt-in, respects mute, reuses its device, and closes cleanl
         frequency: { value: 0 },
         connect() {},
         disconnect() {},
-        start() {
+        start(time?: number) {
+          if (time === undefined) ambientStarts++;
           notes++;
         },
         stop() {},
         onended: null,
       };
+    }
+    createBiquadFilter() {
+      return {
+        type: "lowpass",
+        frequency: { value: 0 },
+        Q: { value: 0 },
+        connect() {},
+        disconnect() {},
+      };
+    }
+    createDelay() {
+      return { delayTime: { value: 0 }, connect() {}, disconnect() {} };
     }
     createGain() {
       return {
@@ -61,12 +75,25 @@ test("sound requires opt-in, respects mute, reuses its device, and closes cleanl
     await sound.enable();
     assert.equal(devices, 1);
     assert.ok(notes > 0);
+    assert.equal(
+      ambientStarts,
+      3,
+      "continuous ambience has three quiet voices",
+    );
+    sound.setVolume(0);
+    sound.setVolume(0.45);
+    sound.setVolume(NaN);
     await sound.disable();
     const mutedNotes = notes;
     sound.play("failure");
     assert.equal(notes, mutedNotes, "muted actions cannot emit notes");
     await sound.enable();
     assert.equal(devices, 1, "enabling again must reuse the existing device");
+    assert.equal(
+      ambientStarts,
+      3,
+      "resuming cannot stack duplicate background soundtracks",
+    );
     await sound.close();
     await sound.close();
     sound.play("step");

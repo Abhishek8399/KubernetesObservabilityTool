@@ -42,6 +42,12 @@ for (const marker of [
   "Restore dependency",
   "Failure lesson timeline",
   "What changes when a Pod fails?",
+  "WHY THIS RESOURCE EXISTS",
+  "Background soundtrack volume",
+  "Response returns",
+  "71-stop expedition",
+  "Check understanding",
+  "From my application to Kubernetes",
 ])
   assert.ok(js.includes(marker), `Missing content: ${marker}`);
 assert.ok(css.includes("prefers-reduced-motion"));

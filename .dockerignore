@@ -1,0 +1,11 @@
+.git
+.env*
+node_modules
+dist
+dist-static
+.next
+.vinext
+.wrangler
+*.tsbuildinfo
+*.log
+coverage

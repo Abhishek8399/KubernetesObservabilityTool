@@ -352,6 +352,13 @@ try {
   assert.ok(firstView.includes("71-stop expedition"));
   assert.ok(firstView.includes("Rotate architecture"));
   assert.ok(firstView.includes("Separate architecture layers"));
+  assert.ok(firstView.includes("Diagram only"));
+  assert.ok(firstView.includes("Hide labels"));
+  assert.ok(firstView.includes("Pan left"));
+  assert.ok(firstView.includes("Focus API SERVER"));
+  assert.ok(courseDeck.includes("Focus this stage"));
+  assert.ok(courseDeck.includes("Watch this stage"));
+  assert.ok(courseDeck.includes('id="visible-flight-stop"'));
   assert.equal(diagnostics.length, 0, diagnostics[0]?.slice(0, 250));
   console.log(
     "Rendered SVG verified: lost and starting Pod, zone outage, withdrawn routes, capacity growth, rollout versions, explicit repairs and independent standby.",

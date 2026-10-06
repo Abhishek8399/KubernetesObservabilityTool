@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { flightPose, type FlightCamera, type Point } from "./lib/flight";
+import type { SpatialView } from "./lib/spatial";
 
 export interface FlightVisual {
   key: string;
@@ -14,6 +15,7 @@ export interface FlightVisual {
   initialZoom: number;
   camera: FlightCamera;
   previous?: boolean;
+  spatialStart?: SpatialView | null;
 }
 const flightDuration = 3400;
 
@@ -26,6 +28,7 @@ export function useFlightCamera({
   reducedMotion,
   camera,
   onCamera,
+  getSpatialView,
 }: {
   destination: Point | undefined;
   stopKey: string;
@@ -34,6 +37,7 @@ export function useFlightCamera({
   reducedMotion: boolean;
   camera: FlightCamera;
   onCamera: (camera: FlightCamera) => void;
+  getSpatialView?: () => SpatialView | null;
 }) {
   const latestCamera = useRef(camera);
   const plan = useRef<{
@@ -42,6 +46,7 @@ export function useFlightCamera({
     to: Point;
     camera: FlightCamera;
     elapsed: number;
+    spatialStart?: SpatialView | null;
   } | null>(null);
   const [visual, setVisual] = useState<FlightVisual | null>(null);
   useEffect(() => {
@@ -76,6 +81,7 @@ export function useFlightCamera({
         to,
         camera: latestCamera.current,
         elapsed: 0,
+        spatialStart: getSpatialView?.(),
       };
     }
     function tick(now: number) {
@@ -102,12 +108,13 @@ export function useFlightCamera({
         from: p.from,
         to: p.to,
         initialZoom: p.camera.zoom,
+        spatialStart: p.spatialStart,
       });
       if (p.elapsed < flightDuration) handle = requestAnimationFrame(tick);
     }
     handle = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(handle);
-  }, [enabled, paused, reducedMotion, stopKey, x, y, onCamera]);
+  }, [enabled, paused, reducedMotion, stopKey, x, y, onCamera, getSpatialView]);
   // Keep the last pose until the next animation frame installs a new plan.
   // Returning null here would briefly frame the new destination before departure.
   return visual?.key === stopKey

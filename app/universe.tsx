@@ -2,17 +2,14 @@
 
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import {
-  Artifact,
-  SceneDefinitions,
-  type Camera,
-} from "./architecture-scene";
+import { Artifact, SceneDefinitions, type Camera } from "./architecture-scene";
 import SpatialScene from "./spatial-scene";
 import {
   concepts,
@@ -40,6 +37,7 @@ import "./universe.css";
 import "./lessons.css";
 import "./flight.css";
 import "./spatial.css";
+import "./experience.css";
 import FlightDeck from "./flight-deck";
 import { flightMission, resourceAnchor } from "./lib/flight";
 import { useSimulationBackend } from "./use-simulation-backend";
@@ -51,6 +49,7 @@ import {
   understandingSnapshot,
 } from "./lib/learning";
 import { useFlightCamera } from "./use-flight-camera";
+import type { SpatialView } from "./lib/spatial";
 
 type Modal =
   | "connection"
@@ -102,6 +101,13 @@ export default function Universe() {
     [flightEpoch, setFlightEpoch] = useState(0),
     [incidentControls, setIncidentControls] = useState(false);
   const [connection, setConnection] = useState<WorldLink | null>(null);
+  const [diagramOnly, setDiagramOnly] = useState(false);
+  const [sceneEpoch, setSceneEpoch] = useState(0);
+  const spatialView = useRef<SpatialView | null>(null);
+  const recordSpatialView = useCallback((view: SpatialView) => {
+    spatialView.current = view;
+  }, []);
+  const getSpatialView = useCallback(() => spatialView.current, []);
   const [sound, setSound] = useState(true),
     [volume, setVolume] = useState(0.45),
     [audioBusy, setAudioBusy] = useState(false),
@@ -165,6 +171,7 @@ export default function Universe() {
     reducedMotion,
     camera,
     onCamera: setCamera,
+    getSpatialView,
   });
   const flightArrived = flightVisual?.progress === 1 && !flightVisual.previous;
   const component = selected ? conceptById[selected] : null;
@@ -232,6 +239,7 @@ export default function Universe() {
         setJourneyId(null);
         setAutoTour(false);
         setCamera(home);
+        setSceneEpoch((value) => value + 1);
       }
     };
     window.addEventListener("keydown", shortcut);
@@ -344,6 +352,7 @@ export default function Universe() {
     setPaused(false);
     setLayer("all");
     setCamera(home);
+    setSceneEpoch((value) => value + 1);
     setSelected(null);
     setJourneyId(id === "healthy" ? null : `lab:${id}`);
     setStep(0);
@@ -377,6 +386,7 @@ export default function Universe() {
     audio.current?.play("select");
   }
   function leaveFlight() {
+    setSceneEpoch((value) => value + 1);
     setElapsed(flightTime);
     setJourneyId(null);
     setAutoTour(false);
@@ -405,6 +415,7 @@ export default function Universe() {
     }
   }
   function resetWorld() {
+    setSceneEpoch((value) => value + 1);
     setScenario("healthy");
     setElapsed(0);
     setResolved(false);
@@ -421,10 +432,43 @@ export default function Universe() {
 
   return (
     <main
-      className={`universe ${scenario !== "healthy" ? "has-lab" : ""} ${journey ? "has-journey has-flight" : ""} ${journeyId === "application" ? "has-learning" : ""} ${incidentControls ? "show-incident-controls" : ""} ${paused || reducedMotion ? "motion-off" : ""}`}
+      className={`universe scene-first ${diagramOnly ? "diagram-only" : ""} ${scenario !== "healthy" ? "has-lab" : ""} ${journey ? "has-journey has-flight" : ""} ${journeyId === "application" ? "has-learning" : ""} ${incidentControls ? "show-incident-controls" : ""} ${paused || reducedMotion ? "motion-off" : ""}`}
     >
       <div className="world-vignette" />
+      <button
+        className="diagram-toggle"
+        aria-pressed={diagramOnly}
+        onClick={() => setDiagramOnly((value) => !value)}
+      >
+        <Icon name="expand" size={15} />{" "}
+        {diagramOnly ? "Show learning panels" : "Diagram only"}
+      </button>
+      {diagramOnly && (
+        <div className="diagram-audio">
+          <label>
+            Piano{" "}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={Math.round(volume * 100)}
+              onChange={(event) => setVolume(Number(event.target.value) / 100)}
+              aria-label="Diagram piano volume"
+            />
+          </label>
+          <button
+            data-audio-mute
+            onClick={toggleSound}
+            disabled={audioBusy}
+            aria-pressed={sound}
+            aria-label={sound ? "Mute piano" : "Enable piano"}
+          >
+            <Icon name={sound ? "volume" : "mute"} size={17} />
+          </button>
+        </div>
+      )}
       <SpatialScene
+        key={sceneEpoch}
         scenario={scenario}
         simulation={sim}
         lab={frame}
@@ -442,6 +486,9 @@ export default function Universe() {
         recovery={recovery}
         camera={camera}
         guided={autopilot}
+        diagramOnly={diagramOnly}
+        reducedMotion={reducedMotion}
+        onSpatialView={recordSpatialView}
         onCamera={manualCamera}
         flight={
           journeyStep
@@ -488,7 +535,7 @@ export default function Universe() {
           </button>
           <label
             className="sound-volume"
-            title="Matrix-inspired ambient soundtrack volume"
+            title="Original calming piano soundtrack volume"
           >
             <span>SOUND</span>
             <input
@@ -702,7 +749,10 @@ export default function Universe() {
         </button>
         <span className="tool-divider" />
         <button
-          onClick={() => manualCamera(home)}
+          onClick={() => {
+            manualCamera(home);
+            setSceneEpoch((value) => value + 1);
+          }}
           aria-label="Reset camera"
           title="Reset camera"
         >
@@ -724,6 +774,8 @@ export default function Universe() {
       {journey && journeyStep && (
         <FlightDeck
           mission={journey}
+          diagramOnly={diagramOnly}
+          onShowLesson={() => setDiagramOnly(false)}
           step={step}
           visual={flightVisual}
           paused={paused}

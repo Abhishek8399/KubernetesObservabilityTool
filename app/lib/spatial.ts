@@ -15,6 +15,37 @@ export interface Perspective extends Orbit {
   target: Vector3;
   distance: number;
   center: Point;
+  focal?: number;
+}
+export interface SpatialView {
+  target: Vector3;
+  distance: number;
+  separation: number;
+  pan: Point;
+}
+export function viewportCamera(width: number, height: number) {
+  const w = Number.isFinite(width) ? Math.max(240, width) : 1200;
+  const h = Number.isFinite(height) ? Math.max(200, height) : 700;
+  return { width: w, height: h, focal: Math.min(w, h) * 1.45 };
+}
+/** Frame a resource at a readable fraction of the viewport, independent of SVG scaling. */
+export function focusDistance(
+  width: number,
+  height: number,
+  extent = 70,
+  layer = false,
+) {
+  const viewport = viewportCamera(width, height);
+  if (layer)
+    return Math.max(
+      450,
+      (viewport.focal * extent * 2) / (viewport.width * 0.7),
+    );
+  return Math.max(
+    220,
+    (viewport.focal * extent) /
+      (Math.min(viewport.width, viewport.height) * 0.28),
+  );
 }
 export const defaultOrbit: Orbit = { yaw: -0.32, pitch: 0.48, separation: 1 };
 export const spatialPlanes = [
@@ -217,6 +248,7 @@ export function spatialFlightPose(
   to: Vector3,
   initialDistance: number,
   progress: number,
+  arrivalDistance = 630,
 ) {
   const t = Math.min(1, Math.max(0, Number.isFinite(progress) ? progress : 0));
   const ease = (v: number) => v * v * (3 - 2 * v);
@@ -230,7 +262,7 @@ export function spatialFlightPose(
         ? initialDistance + (1420 - initialDistance) * ease(t / 0.2)
         : t < 0.7
           ? 1420
-          : 1420 - (1420 - 630) * ease((t - 0.7) / 0.3),
+          : 1420 - (1420 - arrivalDistance) * ease((t - 0.7) / 0.3),
     transit,
   };
 }
@@ -257,7 +289,7 @@ export function project(
   const rawDepth =
     c.distance - dy * Math.sin(c.pitch) - forward * Math.cos(c.pitch);
   const depth = Math.max(80, rawDepth);
-  const scale = 1080 / depth;
+  const scale = (c.focal ?? 1080) / depth;
   return {
     x: c.center.x + right * scale,
     y: c.center.y - up * scale,
@@ -270,9 +302,9 @@ export function orbitBounds(orbit: Orbit): Orbit {
   return {
     yaw: Number.isFinite(orbit.yaw) ? orbit.yaw : defaultOrbit.yaw,
     pitch: Math.max(
-      0.15,
+      -1.4,
       Math.min(
-        1.1,
+        1.4,
         Number.isFinite(orbit.pitch) ? orbit.pitch : defaultOrbit.pitch,
       ),
     ),

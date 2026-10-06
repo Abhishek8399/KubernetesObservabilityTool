@@ -31,6 +31,8 @@ export default function FlightDeck(p: {
   onInspect: (id: string) => void;
   onOverview: () => void;
   onLab: () => void;
+  diagramOnly?: boolean;
+  onShowLesson?: () => void;
 }) {
   const stop = p.mission.steps[p.step],
     c = conceptById[stop.node];
@@ -44,257 +46,338 @@ export default function FlightDeck(p: {
         ? "RESOURCE STOP"
         : "TRAVELLING";
   return (
-    <div
-      className="flight-interface"
-      style={{ "--flight-color": getColor(c.layer) } as CSSProperties}
-    >
-      <div className="flight-topline">
-        <span className="flight-signal">
-          <i /> EXPEDITION MODE <b>{status}</b>
-        </span>
-        <button onClick={p.onClose}>
-          <Icon name="close" size={14} /> Leave flight
-        </button>
-      </div>
-      <aside className="flight-coordinate" aria-hidden="true">
-        <span>DESTINATION {String(p.step + 1).padStart(2, "0")}</span>
-        <strong>{c.title}</strong>
-        <span>
-          {layers.find((l) => l.id === c.layer)?.label} / {c.kind}
-        </span>
-        <small>
-          {p.visual?.phase ?? "Plotting course"}{" "}
-          {p.visual && `${Math.round(p.visual.progress * 100)}%`}
-        </small>
-      </aside>
-      <aside className="flight-manifest">
-        <span>FLIGHT PLAN</span>
-        <small className="engine-status">
-          {p.engine}
-          {p.engineError && (
-            <span role="status">
-              {" "}
-              ? Connection interrupted; browser simulation continues.
-            </span>
-          )}
-        </small>
-        <label htmlFor="flight-stop">{p.mission.title}</label>
-        <select
-          id="flight-stop"
-          value={p.step}
-          onChange={(e) => p.onStep(Number(e.target.value))}
+    <>
+      {p.diagramOnly && (
+        <nav
+          className="diagram-flight-controls"
+          aria-label="Diagram journey controls"
         >
-          {p.mission.steps.map((s, i) => (
-            <option value={i} key={i}>
-              {String(i + 1).padStart(2, "0")} · {conceptById[s.node].title} —{" "}
-              {s.title}
-            </option>
-          ))}
-        </select>
-        {stop.lesson && (
-          <div className="learning-milestone-progress">
-            <b>
-              {p.completed} / {p.mission.steps.length}
-            </b>{" "}
-            understanding checks completed
-            <small>
-              Practice evidence is a separate milestone. Dimmed resources are
-              planned; amber Pods are starting; green Pods are ready.
-            </small>
-          </div>
-        )}
-        <div className="flight-manifest-stats">
-          <span>
-            <b>
-              {p.ready}/{p.desired}
-            </b>{" "}
-            Ready Pods
-          </span>
-          <span>
-            <b>{p.backends}</b> Serving backends
-          </span>
-        </div>
-        <p>
-          {stop.phase === "Outbound request" ||
-          stop.phase === "Response returns"
-            ? "The ship follows a logical request journey. Exact network hops depend on the implementation."
-            : stop.phase === "Discovery"
-              ? "DNS is a discovery step before the connection, not an HTTP forwarding hop."
-              : "The ship is your guide. These connections illustrate control and dependency relationships, not application packet hops."}
-        </p>
-        <button onClick={p.onOverview}>
-          <Icon name="expand" size={14} /> Explore the map
-        </button>
-        {!!stop.lesson && !p.autopilot && (
-          <button onClick={() => p.onStep(p.step)}>
-            <Icon name="orbit" size={14} /> Return to this milestone
-          </button>
-        )}
-        {p.mission.id.startsWith("lab:") && (
-          <button onClick={p.onLab}>
-            <Icon name="pulse" size={14} /> Open incident controls
-          </button>
-        )}
-        {p.mission.id.startsWith("lab:") && (
-          <button onClick={p.onCourse}>Return to application journey</button>
-        )}
-        {p.reducedMotion && (
-          <small>
-            Reduced motion: destinations change without camera travel.
-          </small>
-        )}
-      </aside>
-      <section
-        className="flight-caption"
-        aria-label="Flight resource explanation"
-      >
-        {stop.lesson?.story && (
-          <nav
-            className="story-chapters"
-            aria-label="Application journey chapters"
+          <button
+            disabled={p.step === 0}
+            onClick={() => p.onStep(p.step - 1)}
+            aria-label="Previous diagram stop"
           >
-            {[
-              ...new Set(
-                p.mission.steps
-                  .map((s) => s.lesson?.story?.chapter)
-                  .filter(Boolean),
-              ),
-            ].map((chapter) => (
-              <button
-                key={chapter}
-                aria-current={
-                  stop.lesson?.story?.chapter === chapter ? "step" : undefined
-                }
-                onClick={() =>
-                  p.onStep(
-                    p.mission.steps.findIndex(
-                      (s) => s.lesson?.story?.chapter === chapter,
-                    ),
-                  )
-                }
-              >
-                {chapter}
-              </button>
-            ))}
-          </nav>
-        )}
-        <div className="flight-caption-heading">
+            ←
+          </button>
+          <button
+            onClick={() => p.onStep(p.step)}
+            aria-label="Refocus current journey resource"
+          >
+            ◎
+          </button>
           <span>
-            <i /> {stop.phase.toUpperCase()}
+            {p.step + 1} / {p.mission.steps.length}
           </span>
-          <span>
-            STOP {p.step + 1} / {p.mission.steps.length}
+          <button
+            disabled={last || (!!stop.lesson && !p.checked)}
+            onClick={() => p.onStep(p.step + 1)}
+            aria-label="Next diagram stop"
+          >
+            →
+          </button>
+          {!!stop.lesson && !p.checked && (
+            <button onClick={p.onShowLesson}>Open understanding check</button>
+          )}
+        </nav>
+      )}
+      <div
+        className="flight-interface"
+        style={{ "--flight-color": getColor(c.layer) } as CSSProperties}
+      >
+        <div className="flight-topline">
+          <span className="flight-signal">
+            <i /> EXPEDITION MODE <b>{status}</b>
           </span>
+          <button onClick={p.onClose}>
+            <Icon name="close" size={14} /> Leave flight
+          </button>
         </div>
-        <div
-          className="flight-caption-content"
-          key={`${p.mission.id}:${p.step}`}
-        >
-          <div className="flight-purpose">
-            <small>WHY THIS RESOURCE EXISTS</small>
-            <strong>{c.title}</strong>
-            <p>{c.summary}</p>
-            <span>
-              {isLogicalStop(c.id)
-                ? "Logical close-up at its owning resource"
-                : c.kind === "Core"
-                  ? "Native Kubernetes component"
-                  : `${c.kind} · implementation-dependent`}
-            </span>
-          </div>
-          {stop.lesson ? (
-            <LessonCheckpoint
-              key={`${p.mission.id}:${p.step}`}
-              stop={stop}
-              checked={p.checked}
-              onAnswer={p.onAnswer}
-              onExample={p.onExample}
-              onFailure={p.onFailure}
-              index={p.step}
-            />
-          ) : (
-            <div
-              className="flight-action"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              <small>WHAT HAPPENS AT THIS STOP</small>
-              <h2>{stop.title}</h2>
-              <p>{stop.body}</p>
+        <aside className="flight-coordinate" aria-hidden="true">
+          <span>DESTINATION {String(p.step + 1).padStart(2, "0")}</span>
+          <strong>{c.title}</strong>
+          <span>
+            {layers.find((l) => l.id === c.layer)?.label} / {c.kind}
+          </span>
+          <small>
+            {p.visual?.phase ?? "Plotting course"}{" "}
+            {p.visual && `${Math.round(p.visual.progress * 100)}%`}
+          </small>
+        </aside>
+        <aside className="flight-manifest">
+          <span>FLIGHT PLAN</span>
+          <small className="engine-status">
+            {p.engine}
+            {p.engineError && (
+              <span role="status">
+                {" "}
+                ? Connection interrupted; browser simulation continues.
+              </span>
+            )}
+          </small>
+          <label htmlFor="flight-stop">{p.mission.title}</label>
+          <select
+            id="flight-stop"
+            value={p.step}
+            onChange={(e) => p.onStep(Number(e.target.value))}
+          >
+            {p.mission.steps.map((s, i) => (
+              <option value={i} key={i}>
+                {String(i + 1).padStart(2, "0")} · {conceptById[s.node].title} —{" "}
+                {s.title}
+              </option>
+            ))}
+          </select>
+          {stop.lesson && (
+            <div className="learning-milestone-progress">
+              <b>
+                {p.completed} / {p.mission.steps.length}
+              </b>{" "}
+              understanding checks completed
+              <small>
+                Practice evidence is a separate milestone. Dimmed resources are
+                planned; amber Pods are starting; green Pods are ready.
+              </small>
             </div>
           )}
-        </div>
-        <div className="flight-controls">
-          <button onClick={() => p.onInspect(stop.node)}>
-            <Icon name="layers" size={14} /> Resource details
-          </button>
-          <div>
-            <button
-              disabled={p.step === 0}
-              onClick={() => p.onStep(p.step - 1)}
-              aria-label="Previous flight stop"
-            >
-              ←
-            </button>
-            <button
-              className="flight-play"
-              onClick={p.onPlay}
-              disabled={!!stop.lesson && !p.checked}
-              aria-label={
-                stop.lesson
-                  ? last
-                    ? "Finish learning journey"
-                    : "Next learning milestone"
-                  : !p.autopilot
-                    ? "Resume guided camera"
-                    : p.paused || !p.auto
-                      ? "Continue automatic flight"
-                      : "Pause automatic flight"
-              }
-            >
-              <Icon
-                name={p.paused || !p.auto || !p.autopilot ? "play" : "pause"}
-                size={14}
-              />
-              {stop.lesson
-                ? last
-                  ? "Finish journey"
-                  : "Next milestone"
-                : !p.autopilot
-                  ? "Resume flight"
-                  : p.paused || !p.auto
-                    ? last
-                      ? "Replay flight"
-                      : "Continue"
-                    : "Pause"}
-            </button>
-            <button
-              disabled={last || (!!stop.lesson && !p.checked)}
-              onClick={() => p.onStep(p.step + 1)}
-              aria-label="Next flight stop"
-            >
-              →
-            </button>
+          <div className="flight-manifest-stats">
+            <span>
+              <b>
+                {p.ready}/{p.desired}
+              </b>{" "}
+              Ready Pods
+            </span>
+            <span>
+              <b>{p.backends}</b> Serving backends
+            </span>
           </div>
-          <span>
-            {last && arrived
-              ? "Expedition complete · revisit any stop"
-              : "Next: " +
-                conceptById[
-                  p.mission.steps[
-                    Math.min(p.step + 1, p.mission.steps.length - 1)
-                  ].node
-                ].title}
-          </span>
-        </div>
-        <div className="flight-route-progress" aria-hidden="true">
-          <i
-            style={{
-              width: `${((p.step + (arrived ? 1 : 0.5)) / p.mission.steps.length) * 100}%`,
-            }}
-          />
-        </div>
-      </section>
-    </div>
+          <p>
+            {stop.phase === "Outbound request" ||
+            stop.phase === "Response returns"
+              ? "The ship follows a logical request journey. Exact network hops depend on the implementation."
+              : stop.phase === "Discovery"
+                ? "DNS is a discovery step before the connection, not an HTTP forwarding hop."
+                : "The ship is your guide. These connections illustrate control and dependency relationships, not application packet hops."}
+          </p>
+          <button onClick={p.onOverview}>
+            <Icon name="expand" size={14} /> Explore the map
+          </button>
+          {!!stop.lesson && !p.autopilot && (
+            <button onClick={() => p.onStep(p.step)}>
+              <Icon name="orbit" size={14} /> Return to this milestone
+            </button>
+          )}
+          {p.mission.id.startsWith("lab:") && (
+            <button onClick={p.onLab}>
+              <Icon name="pulse" size={14} /> Open incident controls
+            </button>
+          )}
+          {p.mission.id.startsWith("lab:") && (
+            <button onClick={p.onCourse}>Return to application journey</button>
+          )}
+          {p.reducedMotion && (
+            <small>
+              Reduced motion: destinations change without camera travel.
+            </small>
+          )}
+        </aside>
+        <section
+          className="flight-caption"
+          aria-label="Flight resource explanation"
+        >
+          <div className="lesson-navigation">
+            <label htmlFor="visible-flight-stop">{p.mission.title}</label>
+            <select
+              id="visible-flight-stop"
+              value={p.step}
+              onChange={(event) => p.onStep(Number(event.target.value))}
+            >
+              {p.mission.steps.map((s, index) => (
+                <option key={index} value={index}>
+                  {index + 1}. {s.title}
+                </option>
+              ))}
+            </select>
+            <div className="lesson-telemetry" aria-live="polite">
+              <span>
+                <b>
+                  {p.ready}/{p.desired}
+                </b>{" "}
+                Pods ready
+              </span>
+              <span>
+                <b>{p.backends}</b> serving endpoints
+              </span>
+              <button onClick={() => p.onStep(p.step)}>
+                ↗ Focus this stage
+              </button>
+            </div>
+            {stop.lesson?.story && (
+              <p className="lesson-observation">
+                <b>Watch this stage:</b> {stop.lesson.story.observe}
+              </p>
+            )}
+            {p.mission.id.startsWith("lab:") && (
+              <button onClick={p.onLab}>Incident controls</button>
+            )}
+            {p.mission.id.startsWith("lab:") && (
+              <button onClick={p.onCourse}>
+                Return to application journey
+              </button>
+            )}
+            {p.engineError && (
+              <small role="status">
+                Backend unavailable; browser simulation continues.
+              </small>
+            )}
+          </div>
+          {stop.lesson?.story && (
+            <nav
+              className="story-chapters"
+              aria-label="Application journey chapters"
+            >
+              {[
+                ...new Set(
+                  p.mission.steps
+                    .map((s) => s.lesson?.story?.chapter)
+                    .filter(Boolean),
+                ),
+              ].map((chapter) => (
+                <button
+                  key={chapter}
+                  aria-current={
+                    stop.lesson?.story?.chapter === chapter ? "step" : undefined
+                  }
+                  onClick={() =>
+                    p.onStep(
+                      p.mission.steps.findIndex(
+                        (s) => s.lesson?.story?.chapter === chapter,
+                      ),
+                    )
+                  }
+                >
+                  {chapter}
+                </button>
+              ))}
+            </nav>
+          )}
+          <div className="flight-caption-heading">
+            <span>
+              <i /> {stop.phase.toUpperCase()}
+            </span>
+            <span>
+              STOP {p.step + 1} / {p.mission.steps.length}
+            </span>
+          </div>
+          <div
+            className="flight-caption-content"
+            key={`${p.mission.id}:${p.step}`}
+          >
+            <div className="flight-purpose">
+              <small>WHY THIS RESOURCE EXISTS</small>
+              <strong>{c.title}</strong>
+              <p>{c.summary}</p>
+              <span>
+                {isLogicalStop(c.id)
+                  ? "Logical close-up at its owning resource"
+                  : c.kind === "Core"
+                    ? "Native Kubernetes component"
+                    : `${c.kind} · implementation-dependent`}
+              </span>
+            </div>
+            {stop.lesson ? (
+              <LessonCheckpoint
+                key={`${p.mission.id}:${p.step}`}
+                stop={stop}
+                checked={p.checked}
+                onAnswer={p.onAnswer}
+                onExample={p.onExample}
+                onFailure={p.onFailure}
+                index={p.step}
+              />
+            ) : (
+              <div
+                className="flight-action"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <small>WHAT HAPPENS AT THIS STOP</small>
+                <h2>{stop.title}</h2>
+                <p>{stop.body}</p>
+              </div>
+            )}
+          </div>
+          <div className="flight-controls">
+            <button onClick={() => p.onInspect(stop.node)}>
+              <Icon name="layers" size={14} /> Resource details
+            </button>
+            <div>
+              <button
+                disabled={p.step === 0}
+                onClick={() => p.onStep(p.step - 1)}
+                aria-label="Previous flight stop"
+              >
+                ←
+              </button>
+              <button
+                className="flight-play"
+                onClick={p.onPlay}
+                disabled={!!stop.lesson && !p.checked}
+                aria-label={
+                  stop.lesson
+                    ? last
+                      ? "Finish learning journey"
+                      : "Next learning milestone"
+                    : !p.autopilot
+                      ? "Resume guided camera"
+                      : p.paused || !p.auto
+                        ? "Continue automatic flight"
+                        : "Pause automatic flight"
+                }
+              >
+                <Icon
+                  name={p.paused || !p.auto || !p.autopilot ? "play" : "pause"}
+                  size={14}
+                />
+                {stop.lesson
+                  ? last
+                    ? "Finish journey"
+                    : "Next milestone"
+                  : !p.autopilot
+                    ? "Resume flight"
+                    : p.paused || !p.auto
+                      ? last
+                        ? "Replay flight"
+                        : "Continue"
+                      : "Pause"}
+              </button>
+              <button
+                disabled={last || (!!stop.lesson && !p.checked)}
+                onClick={() => p.onStep(p.step + 1)}
+                aria-label="Next flight stop"
+              >
+                →
+              </button>
+            </div>
+            <span>
+              {last && arrived
+                ? "Expedition complete · revisit any stop"
+                : "Next: " +
+                  conceptById[
+                    p.mission.steps[
+                      Math.min(p.step + 1, p.mission.steps.length - 1)
+                    ].node
+                  ].title}
+            </span>
+          </div>
+          <div className="flight-route-progress" aria-hidden="true">
+            <i
+              style={{
+                width: `${((p.step + (arrived ? 1 : 0.5)) / p.mission.steps.length) * 100}%`,
+              }}
+            />
+          </div>
+        </section>
+      </div>
+    </>
   );
 }

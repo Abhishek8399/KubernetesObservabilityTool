@@ -23,6 +23,7 @@ import {
 
 import { explainConnection } from "./data/connections";
 import type { FlightVisual } from "./use-flight-camera";
+import type { SpatialView } from "./lib/spatial";
 import {
   flightPoint,
   isLogicalStop,
@@ -48,6 +49,9 @@ export type SceneProps = {
   recovery: boolean;
   camera: Camera;
   guided?: boolean;
+  diagramOnly?: boolean;
+  reducedMotion?: boolean;
+  onSpatialView?: (view: SpatialView) => void;
   flight?: {
     visual: FlightVisual | null;
     destination: Point;

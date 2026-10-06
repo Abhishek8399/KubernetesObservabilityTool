@@ -1,11 +1,13 @@
 "use client";
 import {
   useEffect,
+  useCallback,
   useRef,
   useState,
   type ReactNode,
   type PointerEvent,
   type MouseEvent,
+  type KeyboardEvent,
 } from "react";
 import type { SceneProps } from "./architecture-scene";
 import {
@@ -26,6 +28,9 @@ import {
   spatialFlightPose,
   coursePoint,
   flightLift,
+  viewportCamera,
+  focusDistance,
+  mixVector,
   type Vector3,
   type Perspective,
   type Orbit,
@@ -335,13 +340,54 @@ function FlightShip({
 export default function SpatialScene(p: SceneProps) {
   const [orbit, setOrbit] = useState<Orbit>(defaultOrbit),
     [isolated, setIsolated] = useState<string | null>(null);
+  const [viewport, setViewport] = useState(() => viewportCamera(1200, 700));
+  const [labels, setLabels] = useState(true);
+  const [dragMode, setDragMode] = useState<"orbit" | "pan">("orbit");
+  const [overview, setOverview] = useState<string | null>(
+    p.guided === false ? (p.flight?.stopKey ?? "overview") : null,
+  );
+  const [pan, setPan] = useState({
+    x: 0,
+    y: 0,
+    key: p.flight?.stopKey ?? "overview",
+  });
+  const [focus, setFocus] = useState<{
+    key: string;
+    target: Vector3;
+    distance: number;
+    zoom: number;
+    separation: number;
+    id: string;
+    label: string;
+    state: string;
+  } | null>(null);
+  const focusAnimation = useRef<number | null>(null);
   const drag = useRef<{
     x: number;
     y: number;
     orbit: Orbit;
+    pan: { x: number; y: number };
+    mode: "orbit" | "pan";
     moved: boolean;
   } | null>(null);
   const svg = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    const element = svg.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setViewport(viewportCamera(width, height));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(
+    () => () => {
+      if (focusAnimation.current !== null)
+        cancelAnimationFrame(focusAnimation.current);
+    },
+    [p.flight?.stopKey],
+  );
   const { camera: manualCamera, onCamera } = p;
   useEffect(() => {
     const element = svg.current;
@@ -371,32 +417,166 @@ export default function SpatialScene(p: SceneProps) {
     ? spatialPosition("pods", orbit.separation, visual.to)
     : destination;
   // Both camera and ship use the same 3D curve, so the reticle cannot drift away from its destination.
-  const from = visual
-    ? spatialPosition("pods", orbit.separation, visual.from)
-    : destination;
+  const from = visual?.spatialStart
+    ? {
+        ...visual.spatialStart.target,
+        y:
+          (visual.spatialStart.target.y * orbit.separation) /
+          visual.spatialStart.separation,
+      }
+    : visual
+      ? spatialPosition("pods", orbit.separation, visual.from)
+      : destination;
   const pose = spatialFlightPose(
     from,
     travelTo,
-    1670 / (visual?.initialZoom ?? 1),
+    visual?.spatialStart?.distance ?? 1670 / (visual?.initialZoom ?? 1),
     visual?.progress ?? (p.flight ? 0 : 1),
+    focusDistance(viewport.width, viewport.height),
   );
+  const focusKey = p.flight?.stopKey ?? "overview";
+  const overviewActive = overview === focusKey && p.guided === false;
+  const departurePan = Math.max(0, 1 - (visual?.progress ?? 1) / 0.2);
+  const activePan =
+    pan.key === focusKey
+      ? pan
+      : p.flight && p.guided !== false && visual?.spatialStart
+        ? {
+            x: visual.spatialStart.pan.x * departurePan,
+            y: visual.spatialStart.pan.y * departurePan,
+          }
+        : { x: 0, y: 0 };
+  const activeFocus =
+    focus?.key === focusKey && (!p.flight || p.guided === false) ? focus : null;
   const camera: Perspective = {
     ...orbit,
-    target: planeFocus
-      ? { x: planeFocus.x, y: planeFocus.y * orbit.separation, z: planeFocus.z }
-      : p.flight && visual
-        ? pose.target
-        : { x: -40, y: 60, z: 70 },
-    distance: planeFocus
-      ? 1250 / p.camera.zoom
-      : p.flight && visual && p.guided !== false
-        ? pose.distance
-        : p.flight && visual
-          ? (pose.distance * (visual.camera?.zoom ?? p.camera.zoom)) /
-            p.camera.zoom
-          : 1670 / p.camera.zoom,
-    center: { x: p.flight ? 850 : 1020, y: 430 },
+    focal: viewport.focal,
+    target: activeFocus
+      ? {
+          ...activeFocus.target,
+          y: (activeFocus.target.y * orbit.separation) / activeFocus.separation,
+        }
+      : planeFocus
+        ? {
+            x: planeFocus.x,
+            y: planeFocus.y * orbit.separation,
+            z: planeFocus.z,
+          }
+        : p.flight && visual && !overviewActive
+          ? { ...pose.target, y: pose.target.y + 28 }
+          : { x: -40, y: 60, z: 70 },
+    distance: activeFocus
+      ? (activeFocus.distance * activeFocus.zoom) / p.camera.zoom
+      : planeFocus
+        ? 1250 / p.camera.zoom
+        : overviewActive
+          ? 1670 / p.camera.zoom
+          : p.flight && visual && p.guided !== false
+            ? pose.distance
+            : p.flight && visual
+              ? (pose.distance * (visual.camera?.zoom ?? p.camera.zoom)) /
+                p.camera.zoom
+              : 1670 / p.camera.zoom,
+    center: {
+      x:
+        viewport.width *
+          (p.flight || activeFocus || planeFocus || p.diagramOnly
+            ? 0.5
+            : 0.64) +
+        activePan.x,
+      y: viewport.height * 0.52 + activePan.y,
+    },
   };
+  const { onSpatialView } = p;
+  useEffect(() => {
+    if (visual?.previous) return;
+    onSpatialView?.({
+      target: {
+        x: camera.target.x,
+        y: camera.target.y - 28,
+        z: camera.target.z,
+      },
+      distance: camera.distance,
+      separation: orbit.separation,
+      pan: { x: activePan.x, y: activePan.y },
+    });
+  }, [
+    onSpatialView,
+    camera.target.x,
+    camera.target.y,
+    camera.target.z,
+    camera.distance,
+    orbit.separation,
+    activePan.x,
+    activePan.y,
+    visual?.previous,
+  ]);
+  const focusAt = useCallback(
+    (
+      initial: Perspective,
+      id: string,
+      label: string,
+      point: Vector3,
+      state = "ready",
+      extent = 70,
+    ) => {
+      if (focusAnimation.current !== null)
+        cancelAnimationFrame(focusAnimation.current);
+      const target = { ...point, y: point.y + (extent === 70 ? 28 : 0) };
+      const distance = focusDistance(
+        viewport.width,
+        viewport.height,
+        extent,
+        state === "layer",
+      );
+      const zoom = p.camera.zoom;
+      const started = performance.now();
+      onCamera(p.camera);
+      setOverview(null);
+      setIsolated(null);
+      setPan({ x: 0, y: 0, key: focusKey });
+      const tick = (now: number) => {
+        const t = p.reducedMotion ? 1 : Math.min(1, (now - started) / 800);
+        const eased = t * t * (3 - 2 * t);
+        setFocus({
+          key: focusKey,
+          target: mixVector(initial.target, target, eased),
+          distance: initial.distance + (distance - initial.distance) * eased,
+          zoom,
+          separation: orbit.separation,
+          id,
+          label,
+          state,
+        });
+        focusAnimation.current = t < 1 ? requestAnimationFrame(tick) : null;
+      };
+      focusAnimation.current = requestAnimationFrame(tick);
+    },
+    [
+      viewport.width,
+      viewport.height,
+      p.camera,
+      p.reducedMotion,
+      onCamera,
+      focusKey,
+      orbit.separation,
+    ],
+  );
+  function movePan(x: number, y: number) {
+    onCamera(p.camera);
+    setPan({ x: activePan.x + x, y: activePan.y + y, key: focusKey });
+  }
+  function resetView() {
+    setOverview(focusKey);
+    if (focusAnimation.current !== null)
+      cancelAnimationFrame(focusAnimation.current);
+    focusAnimation.current = null;
+    setFocus(null);
+    setPan({ x: 0, y: 0, key: focusKey });
+    setOrbit(defaultOrbit);
+    setIsolated(null);
+    onCamera({ x: 0, y: 0, zoom: 1 });
+  }
   const planned = (id: string) => {
     const step = p.lab.learning?.step;
     if (step === undefined) return false;
@@ -420,9 +600,31 @@ export default function SpatialScene(p: SceneProps) {
         : id;
   function selectResource(event: MouseEvent<SVGGElement>) {
     const id = event.currentTarget.dataset.conceptId;
-    if (id && !drag.current?.moved) p.onSelect(id);
+    const data = event.currentTarget.dataset;
+    if (id && !drag.current?.moved)
+      focusAt(
+        camera,
+        id,
+        data.label ?? id,
+        { x: Number(data.x), y: Number(data.y), z: Number(data.z) },
+        data.state,
+      );
+  }
+  function handleResourceKey(event: KeyboardEvent<SVGGElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    const data = event.currentTarget.dataset;
+    if (data.conceptId)
+      focusAt(
+        camera,
+        data.conceptId,
+        data.label ?? data.conceptId,
+        { x: Number(data.x), y: Number(data.y), z: Number(data.z) },
+        data.state,
+      );
   }
   const focusResource = (id: string) =>
+    activeFocus?.id === conceptId(id) ||
     p.selected === conceptId(id) ||
     p.focus === conceptId(id) ||
     p.highlights.includes(conceptId(id));
@@ -467,14 +669,9 @@ export default function SpatialScene(p: SceneProps) {
       <g
         role="button"
         tabIndex={0}
-        aria-label={`Explain ${label}: ${state}`}
+        aria-label={`Focus ${label}: ${state}. Open resource details from the focus toolbar.`}
         onClick={selectResource}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            p.onSelect(conceptId(id));
-          }
-        }}
+        onKeyDown={handleResourceKey}
         className={`spatial-resource ${active ? "spatial-active" : ""}`}
         opacity={
           hidden
@@ -490,6 +687,10 @@ export default function SpatialScene(p: SceneProps) {
         data-spatial-resource={id}
         data-concept-id={conceptId(id)}
         data-state={state}
+        data-label={label}
+        data-x={pos.x}
+        data-y={pos.y}
+        data-z={pos.z}
       >
         <ellipse
           cx={q.x}
@@ -623,8 +824,57 @@ export default function SpatialScene(p: SceneProps) {
       pos,
       <g
         data-spatial-plane={plane.id}
+        role="button"
+        tabIndex={0}
+        aria-label={`Focus ${plane.title}: ${plane.detail}`}
+        onClick={() => {
+          if (!drag.current?.moved)
+            focusAt(
+              camera,
+              plane.node,
+              plane.title,
+              pos,
+              "layer",
+              Math.max(plane.w, plane.d),
+            );
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            focusAt(
+              camera,
+              plane.node,
+              plane.title,
+              pos,
+              "layer",
+              Math.max(plane.w, plane.d),
+            );
+          }
+        }}
         opacity={activeIsolation && activeIsolation !== plane.id ? 0.08 : 1}
       >
+        {[
+          { x: pos.x - plane.w, y: pos.y, z: pos.z - plane.d },
+          { x: pos.x + plane.w, y: pos.y, z: pos.z - plane.d },
+          { x: pos.x + plane.w, y: pos.y, z: pos.z + plane.d },
+          { x: pos.x - plane.w, y: pos.y, z: pos.z + plane.d },
+        ].every((point) => project(point, camera).visible) && (
+          <polygon
+            points={[
+              { x: pos.x - plane.w, y: pos.y, z: pos.z - plane.d },
+              { x: pos.x + plane.w, y: pos.y, z: pos.z - plane.d },
+              { x: pos.x + plane.w, y: pos.y, z: pos.z + plane.d },
+              { x: pos.x - plane.w, y: pos.y, z: pos.z + plane.d },
+            ]
+              .map((point) => {
+                const q = project(point, camera);
+                return `${q.x},${q.y}`;
+              })
+              .join(" ")}
+            fill="transparent"
+            className="spatial-plane-hit"
+          />
+        )}
         <g opacity=".24">
           <Box
             p={{ ...pos, y: pos.y - 9 }}
@@ -657,19 +907,7 @@ export default function SpatialScene(p: SceneProps) {
             />
           </g>
         ))}
-        <g
-          role="button"
-          tabIndex={0}
-          aria-label={`Explain ${plane.title}`}
-          data-concept-id={plane.node}
-          onClick={selectResource}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              p.onSelect(plane.node);
-            }
-          }}
-        >
+        <g>
           <text
             x={label.x}
             y={label.y + 22}
@@ -849,7 +1087,14 @@ export default function SpatialScene(p: SceneProps) {
     returning = p.flight?.phase === "Response returns";
   function pointerDown(e: PointerEvent<SVGSVGElement>) {
     if (e.button !== 0) return;
-    drag.current = { x: e.clientX, y: e.clientY, orbit, moved: false };
+    drag.current = {
+      x: e.clientX,
+      y: e.clientY,
+      orbit,
+      pan: activePan,
+      mode: e.shiftKey ? "pan" : dragMode,
+      moved: false,
+    };
   }
   function pointerMove(e: PointerEvent<SVGSVGElement>) {
     const d = drag.current;
@@ -860,23 +1105,27 @@ export default function SpatialScene(p: SceneProps) {
     if (d.moved) {
       if (!e.currentTarget.hasPointerCapture(e.pointerId))
         e.currentTarget.setPointerCapture(e.pointerId);
-      setOrbit(
-        orbitBounds({
-          ...d.orbit,
-          yaw: d.orbit.yaw + x * 0.005,
-          pitch: d.orbit.pitch + y * 0.004,
-        }),
-      );
+      onCamera(p.camera);
+      if (d.mode === "pan")
+        setPan({ x: d.pan.x + x, y: d.pan.y + y, key: focusKey });
+      else
+        setOrbit(
+          orbitBounds({
+            ...d.orbit,
+            yaw: d.orbit.yaw + x * 0.005,
+            pitch: d.orbit.pitch + y * 0.004,
+          }),
+        );
     }
   }
   return (
     <>
       <svg
         ref={svg}
-        viewBox="0 0 1600 900"
-        className={`universe-scene spatial-scene ${p.motion ? "spatial-motion" : ""}`}
+        viewBox={`0 0 ${viewport.width} ${viewport.height}`}
+        className={`universe-scene spatial-scene ${!labels ? "labels-hidden" : ""} ${dragMode === "pan" ? "pan-mode" : ""} ${p.motion ? "spatial-motion" : ""}`}
         role="group"
-        aria-label="Perspective Kubernetes architecture. Drag to orbit. Use the spatial controls to tilt or separate layers."
+        aria-label="Three-dimensional Kubernetes architecture. Drag to orbit, shift-drag to pan, scroll to zoom. Click a resource or platform to focus it."
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={(e) => {
@@ -897,10 +1146,10 @@ export default function SpatialScene(p: SceneProps) {
           </filter>
         </defs>
         <ellipse
-          cx="960"
-          cy="510"
-          rx="580"
-          ry="370"
+          cx={viewport.width / 2}
+          cy={viewport.height / 2}
+          rx={viewport.width / 2}
+          ry={viewport.height / 2}
           fill="url(#spatial-halo)"
         />
         <g opacity={activeIsolation ? 0.12 : 1}>{connections}</g>
@@ -953,23 +1202,70 @@ export default function SpatialScene(p: SceneProps) {
           </g>
         )}
       </svg>
-      <section
+      {activeFocus && labels && (
+        <aside className="spatial-focus-readout" aria-live="polite">
+          <span>RESOURCE IN FOCUS · {activeFocus.state.toUpperCase()}</span>
+          <strong>{activeFocus.label}</strong>
+          <p>{conceptById[activeFocus.id]?.summary}</p>
+          <button onClick={() => p.onSelect(activeFocus.id)}>
+            Explain this resource
+          </button>
+          <button onClick={resetView}>Whole architecture</button>
+        </aside>
+      )}
+      <details
         className="spatial-tools"
         aria-label="Explore the three-dimensional architecture"
       >
+        <summary>
+          Camera &amp; labels <span>↗</span>
+        </summary>
+        <div className="spatial-modes">
+          <button
+            aria-pressed={dragMode === "orbit"}
+            onClick={() => setDragMode("orbit")}
+          >
+            Orbit
+          </button>
+          <button
+            aria-pressed={dragMode === "pan"}
+            onClick={() => setDragMode("pan")}
+          >
+            Pan
+          </button>
+          <button
+            aria-pressed={!labels}
+            onClick={() => setLabels((value) => !value)}
+          >
+            {labels ? "Hide labels" : "Show labels"}
+          </button>
+        </div>
+        {activeFocus && (
+          <button onClick={() => p.onSelect(activeFocus.id)}>
+            Explain focused resource
+          </button>
+        )}
+        <div className="spatial-pan-buttons" aria-label="Pan the architecture">
+          <button aria-label="Pan left" onClick={() => movePan(-90, 0)}>
+            ←
+          </button>
+          <button aria-label="Pan up" onClick={() => movePan(0, -90)}>
+            ↑
+          </button>
+          <button aria-label="Pan down" onClick={() => movePan(0, 90)}>
+            ↓
+          </button>
+          <button aria-label="Pan right" onClick={() => movePan(90, 0)}>
+            →
+          </button>
+        </div>
         <div>
           <span>SPATIAL EXPLORER</span>
-          <button
-            onClick={() => {
-              setOrbit(defaultOrbit);
-              setIsolated(null);
-            }}
-            title="Reset spatial view"
-          >
+          <button onClick={resetView} title="Reset spatial view">
             Reset view
           </button>
         </div>
-        <p>Drag to orbit · inspect any resource</p>
+        <p>Drag to orbit · shift-drag to pan · scroll to zoom</p>
         <label>
           Rotate{" "}
           <input
@@ -979,9 +1275,10 @@ export default function SpatialScene(p: SceneProps) {
             max="3.14"
             step=".01"
             value={orbit.yaw}
-            onChange={(e) =>
-              setOrbit({ ...orbit, yaw: Number(e.target.value) })
-            }
+            onChange={(e) => {
+              onCamera(p.camera);
+              setOrbit({ ...orbit, yaw: Number(e.target.value) });
+            }}
           />
         </label>
         <label>
@@ -989,13 +1286,14 @@ export default function SpatialScene(p: SceneProps) {
           <input
             aria-label="Tilt architecture"
             type="range"
-            min=".15"
-            max="1.1"
+            min="-1.4"
+            max="1.4"
             step=".01"
             value={orbit.pitch}
-            onChange={(e) =>
-              setOrbit({ ...orbit, pitch: Number(e.target.value) })
-            }
+            onChange={(e) => {
+              onCamera(p.camera);
+              setOrbit({ ...orbit, pitch: Number(e.target.value) });
+            }}
           />
         </label>
         <label>
@@ -1007,9 +1305,10 @@ export default function SpatialScene(p: SceneProps) {
             max="1.6"
             step=".01"
             value={orbit.separation}
-            onChange={(e) =>
-              setOrbit({ ...orbit, separation: Number(e.target.value) })
-            }
+            onChange={(e) => {
+              onCamera(p.camera);
+              setOrbit({ ...orbit, separation: Number(e.target.value) });
+            }}
           />
         </label>
         <label className="spatial-isolate">
@@ -1018,6 +1317,11 @@ export default function SpatialScene(p: SceneProps) {
             aria-label="Isolate an architecture layer"
             value={activeIsolation ?? "all"}
             onChange={(e) => {
+              setOverview(null);
+              if (focusAnimation.current !== null)
+                cancelAnimationFrame(focusAnimation.current);
+              setFocus(null);
+              setPan({ x: 0, y: 0, key: focusKey });
               setIsolated(e.target.value === "all" ? null : e.target.value);
               onCamera({ x: 0, y: 0, zoom: 1 });
             }}
@@ -1034,7 +1338,7 @@ export default function SpatialScene(p: SceneProps) {
           {planeFocus?.detail ??
             "Layers explain responsibilities; these are not separate required clusters. Control and data planes share APIs and infrastructure."}
         </small>
-      </section>
+      </details>
     </>
   );
 }

@@ -9,6 +9,9 @@ import {
   spatialFlightPose,
   orbitBounds,
   podPosition,
+  viewportCamera,
+  focusDistance,
+  spatialPlanes,
 } from "./spatial.ts";
 const camera = {
   ...defaultOrbit,
@@ -82,12 +85,90 @@ test("perspective exploration changes depth and keeps the destination centered d
   assert.notEqual(before.depth, after.depth);
   assert.equal(
     orbitBounds({ ...defaultOrbit, pitch: 5, separation: -10 }).pitch,
-    1.1,
+    1.4,
   );
   assert.equal(
     orbitBounds({ ...defaultOrbit, pitch: 5, separation: -10 }).separation,
     0.2,
   );
+});
+test("responsive camera frames resources at readable size in wide and narrow lesson viewports", () => {
+  for (const [width, height] of [
+    [1260, 660],
+    [720, 440],
+    [360, 390],
+  ]) {
+    const viewport = viewportCamera(width, height);
+    const target = spatialPosition("api");
+    const c = {
+      ...camera,
+      target,
+      focal: viewport.focal,
+      distance: focusDistance(width, height),
+      center: { x: width / 2, y: height / 2 },
+    };
+    const base = project(target, c);
+    const top = project({ ...target, y: target.y + 65 }, c);
+    assert.equal(base.x, width / 2);
+    assert.equal(base.y, height / 2);
+    assert.ok(top.visible);
+    assert.ok(
+      base.y - top.y > Math.min(width, height) * 0.2,
+      "resource cannot collapse to a tiny fixed-canvas label",
+    );
+    assert.ok(
+      base.y - top.y < height / 2,
+      "resource stays inside its scene viewport",
+    );
+    const flight = spatialFlightPose(target, target, 1670, 1, c.distance);
+    assert.ok(Math.abs(flight.distance - c.distance) < 1e-6);
+  }
+});
+test("exploration can look below and above a layer while keeping the resource centered", () => {
+  for (const pitch of [-1.4, -0.5, 0, 0.5, 1.4]) {
+    const target = spatialPosition("service");
+    const c = { ...camera, ...orbitBounds({ ...defaultOrbit, pitch }), target };
+    assert.equal(project(target, c).y, c.center.y);
+    assert.equal(c.pitch, pitch);
+  }
+});
+test("platform focus fits its area and enlarges the layer relative to the overview", () => {
+  for (const [width, height] of [
+    [1260, 660],
+    [360, 390],
+  ]) {
+    const viewport = viewportCamera(width, height);
+    for (const plane of spatialPlanes) {
+      const target = { x: plane.x, y: plane.y, z: plane.z };
+      const c = {
+        ...camera,
+        target,
+        focal: viewport.focal,
+        distance: focusDistance(
+          width,
+          height,
+          Math.max(plane.w, plane.d),
+          true,
+        ),
+        center: { x: width / 2, y: height / 2 },
+      };
+      for (const x of [-plane.w, plane.w])
+        for (const z of [-plane.d, plane.d]) {
+          const point = project(
+            { x: target.x + x, y: target.y, z: target.z + z },
+            c,
+          );
+          assert.ok(point.visible, plane.id);
+          assert.ok(point.x >= 0 && point.x <= width, plane.id);
+          assert.ok(point.y >= 0 && point.y <= height, plane.id);
+        }
+      if (width > 900)
+        assert.ok(
+          c.distance < 1670,
+          "platform click must move closer on desktop",
+        );
+    }
+  }
 });
 test("three-dimensional travel ascends and descends continuously through departure and arrival", () => {
   for (const [a, b] of [

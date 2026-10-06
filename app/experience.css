@@ -1,0 +1,428 @@
+/* Reserve real space for the architecture instead of covering it with the lesson. */
+.universe.scene-first.diagram-only {
+  min-height: 0;
+  height: 100dvh;
+}
+.spatial-resource:hover {
+  filter: drop-shadow(0 0 10px #a6eada90);
+}
+.spatial-plane-hit:hover {
+  fill: #a3ebe810;
+}
+[data-spatial-plane]:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 7px #a6eada);
+}
+.scene-first .flight-caption-content {
+  scrollbar-width: thin;
+  scrollbar-color: #4b7785 #0a1c29;
+}
+.scene-first.diagram-only .world-dock,
+.scene-first.diagram-only .world-bottom,
+.scene-first.diagram-only .overview-lessons {
+  display: none;
+}
+.scene-first .spatial-tools {
+  z-index: 25;
+  padding: 0;
+  width: 230px;
+}
+.scene-first .spatial-tools summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: #cae9e4;
+}
+.scene-first .spatial-tools[open] {
+  padding: 0 16px 14px;
+}
+.scene-first .spatial-tools[open] summary {
+  margin: 0 -16px 12px;
+  border-bottom: 1px solid #517c8c45;
+}
+.scene-first .spatial-tools .spatial-modes {
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.scene-first .spatial-modes button {
+  border: 1px solid #517c8c45;
+  padding: 7px;
+  border-radius: 6px;
+}
+.scene-first .spatial-modes button[aria-pressed="true"] {
+  background: #69b4a530;
+  color: #c3ffeb;
+}
+.scene-first .spatial-tools .spatial-pan-buttons {
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0 14px;
+}
+.scene-first .spatial-pan-buttons button {
+  font-size: 18px;
+  padding: 6px 10px;
+  border: 1px solid #517c8c45;
+  border-radius: 6px;
+}
+.spatial-plane-hit {
+  cursor: zoom-in;
+}
+.spatial-scene {
+  touch-action: none;
+  cursor: grab;
+}
+.spatial-scene:active {
+  cursor: grabbing;
+}
+.spatial-scene.pan-mode {
+  cursor: move;
+}
+.labels-hidden .spatial-label,
+.labels-hidden .spatial-sub,
+.labels-hidden .spatial-plane-label,
+.labels-hidden .spatial-target text {
+  display: none;
+}
+.spatial-active {
+  filter: drop-shadow(0 0 9px #a2e9df70);
+}
+.spatial-focus-readout {
+  position: absolute;
+  top: 125px;
+  left: 30px;
+  z-index: 22;
+  width: 250px;
+  padding: 16px;
+  border-left: 2px solid #a6e2d9;
+  background: linear-gradient(90deg, #0b202fef, #0b202f66);
+  border-radius: 0 12px 12px 0;
+}
+.spatial-focus-readout span {
+  font: 9px monospace;
+  letter-spacing: 1px;
+  color: #92c9bf;
+}
+.spatial-focus-readout strong {
+  display: block;
+  margin: 9px 0;
+  color: #d0f7f0;
+  font:
+    18px "Space Grotesk",
+    sans-serif;
+}
+.spatial-focus-readout p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a5c2ca;
+}
+.spatial-focus-readout button {
+  color: #c2efe6;
+  padding: 8px 10px;
+  border: 1px solid #517c8c60;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  margin: 4px 6px 0 0;
+}
+.diagram-only .spatial-focus-readout {
+  top: 24px;
+}
+.scene-first.diagram-only .spatial-focus-readout {
+  display: none;
+}
+.diagram-audio {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #729ea35e;
+  border-radius: 24px;
+  padding: 10px 14px;
+  background: #102633ed;
+  color: #b5d7ce;
+}
+.diagram-audio label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+.diagram-audio input {
+  width: 80px;
+  accent-color: #9ce8dd;
+}
+.diagram-audio button {
+  color: inherit;
+  cursor: pointer;
+}
+.lesson-observation {
+  font-size: 11px;
+  color: #a0bec7;
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+.lesson-observation b {
+  color: #c7e8df;
+}
+.lesson-navigation {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid #53748440;
+}
+.lesson-navigation label {
+  display: block;
+  color: #92b7c3;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.lesson-navigation select {
+  width: 100%;
+  border: 1px solid #476875;
+  border-radius: 8px;
+  background: #0c202c;
+  color: #d3eee8;
+  padding: 10px;
+  font-size: 12px;
+}
+.lesson-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+}
+.lesson-telemetry span {
+  font-size: 10px;
+  color: #9db9c4;
+}
+.lesson-telemetry b {
+  color: #c2eee1;
+}
+.lesson-telemetry button {
+  margin-left: auto;
+  color: #a4ded4;
+  font-size: 11px;
+}
+.diagram-flight-controls {
+  position: absolute;
+  z-index: 45;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 15px;
+  border: 1px solid #729ea35e;
+  border-radius: 24px;
+  background: #102633ed;
+  color: #cce9e3;
+}
+.diagram-flight-controls button {
+  color: inherit;
+  cursor: pointer;
+  padding: 5px;
+  font-size: 12px;
+}
+.diagram-flight-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.diagram-flight-controls span {
+  font: 11px monospace;
+  white-space: nowrap;
+}
+.scene-first {
+  --lesson-width: clamp(360px, 29vw, 460px);
+}
+.scene-first .diagram-toggle {
+  position: absolute;
+  left: 28px;
+  bottom: 22px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 16px;
+  border: 1px solid #729ea35e;
+  border-radius: 24px;
+  background: #102633ed;
+  color: #d4eee9;
+  cursor: pointer;
+  font-size: 12px;
+}
+.scene-first.has-flight .spatial-scene {
+  inset: 120px calc(var(--lesson-width) + 36px) 80px 18px;
+  width: calc(100% - var(--lesson-width) - 54px);
+  height: calc(100% - 200px);
+}
+.scene-first.has-flight .flight-caption {
+  top: 128px;
+  bottom: 24px;
+  left: auto;
+  right: 20px;
+  width: var(--lesson-width);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+}
+.scene-first.has-flight .flight-caption-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+  padding: 20px;
+}
+.scene-first .flight-purpose {
+  border-right: 0;
+  border-bottom: 1px solid #53748440;
+  padding: 0 0 14px;
+}
+.scene-first .flight-purpose > small,
+.scene-first .flight-purpose > span {
+  display: none;
+}
+.scene-first .flight-purpose strong {
+  font-size: 21px;
+  margin-top: 0;
+}
+.scene-first .flight-purpose p {
+  font-size: 12px;
+}
+.scene-first .story-chapters {
+  flex: none;
+  padding: 10px;
+}
+.scene-first .flight-caption-heading {
+  padding: 12px 18px;
+  flex: none;
+}
+.scene-first .flight-controls {
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  gap: 12px;
+  flex: none;
+}
+.scene-first .flight-controls > small {
+  display: none;
+}
+.scene-first .flight-controls > span {
+  display: none;
+}
+.scene-first .flight-manifest,
+.scene-first .flight-coordinate {
+  display: none;
+}
+.scene-first.has-flight .camera-tools {
+  right: calc(var(--lesson-width) + 50px);
+  bottom: 24px;
+}
+.scene-first.has-flight .world-layers {
+  right: calc(var(--lesson-width) + 36px);
+}
+.scene-first.has-flight .flight-topline {
+  right: 24px;
+}
+.scene-first.has-flight .spatial-tools {
+  top: auto;
+  bottom: 82px;
+  left: 28px;
+  right: auto;
+  width: 230px;
+}
+.scene-first.diagram-only .world-header,
+.scene-first.diagram-only .world-intro,
+.scene-first.diagram-only .world-status,
+.scene-first.diagram-only .world-questions,
+.scene-first.diagram-only .overview-questions,
+.scene-first.diagram-only .journey-dock,
+.scene-first.diagram-only .world-footer,
+.scene-first.diagram-only .flight-interface,
+.scene-first.diagram-only .world-layers,
+.scene-first.diagram-only .lab-console {
+  display: none;
+}
+.scene-first.diagram-only .spatial-scene {
+  inset: 12px 12px 85px;
+  width: calc(100% - 24px);
+  height: calc(100% - 97px);
+}
+.scene-first.diagram-only .camera-tools {
+  right: 24px;
+  bottom: 24px;
+}
+.scene-first.diagram-only .spatial-tools {
+  left: 28px;
+  right: auto;
+  bottom: 82px;
+  top: auto;
+}
+@media (max-width: 900px) {
+  .spatial-focus-readout {
+    top: 135px;
+    left: 18px;
+    width: 190px;
+    padding: 10px;
+  }
+  .spatial-focus-readout p {
+    display: none;
+  }
+  .scene-first .diagram-flight-controls {
+    bottom: 82px;
+    max-width: calc(100% - 36px);
+    gap: 9px;
+  }
+  .scene-first.has-flight {
+    min-height: 900px;
+  }
+  .scene-first.has-flight .spatial-scene {
+    inset: 125px 12px auto;
+    width: calc(100% - 24px);
+    height: 390px;
+  }
+  .scene-first.has-flight .flight-caption {
+    top: 525px;
+    bottom: 78px;
+    left: 14px;
+    right: 14px;
+    width: auto;
+  }
+  .scene-first.has-flight .flight-topline {
+    top: 102px;
+    left: 18px;
+  }
+  .scene-first.has-flight .world-layers {
+    display: none;
+  }
+  .scene-first.has-flight .spatial-tools {
+    top: 158px;
+    bottom: auto;
+    left: 18px;
+  }
+  .scene-first.has-flight .camera-tools {
+    bottom: auto;
+    top: 445px;
+    right: 18px;
+  }
+  .scene-first.diagram-only .spatial-scene {
+    inset: 12px 12px 85px;
+    height: calc(100% - 97px);
+  }
+  .scene-first.diagram-only .camera-tools {
+    top: auto;
+    bottom: 24px;
+  }
+  .scene-first.diagram-only .spatial-tools {
+    top: auto;
+    bottom: 82px;
+  }
+  .scene-first .diagram-toggle {
+    left: 18px;
+    bottom: 18px;
+    font-size: 11px;
+  }
+}

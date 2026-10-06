@@ -8,11 +8,12 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import ArchitectureScene, {
+import {
   Artifact,
   SceneDefinitions,
   type Camera,
 } from "./architecture-scene";
+import SpatialScene from "./spatial-scene";
 import {
   concepts,
   conceptById,
@@ -38,6 +39,7 @@ import { Soundscape } from "./lib/sound";
 import "./universe.css";
 import "./lessons.css";
 import "./flight.css";
+import "./spatial.css";
 import FlightDeck from "./flight-deck";
 import { flightMission, resourceAnchor } from "./lib/flight";
 import { useSimulationBackend } from "./use-simulation-backend";
@@ -164,7 +166,7 @@ export default function Universe() {
     camera,
     onCamera: setCamera,
   });
-  const flightArrived = flightVisual?.progress === 1;
+  const flightArrived = flightVisual?.progress === 1 && !flightVisual.previous;
   const component = selected ? conceptById[selected] : null;
   const visibleConcepts = concepts.filter(
     (c) =>
@@ -422,7 +424,7 @@ export default function Universe() {
       className={`universe ${scenario !== "healthy" ? "has-lab" : ""} ${journey ? "has-journey has-flight" : ""} ${journeyId === "application" ? "has-learning" : ""} ${incidentControls ? "show-incident-controls" : ""} ${paused || reducedMotion ? "motion-off" : ""}`}
     >
       <div className="world-vignette" />
-      <ArchitectureScene
+      <SpatialScene
         scenario={scenario}
         simulation={sim}
         lab={frame}
@@ -439,6 +441,7 @@ export default function Universe() {
         motion={!paused && !reducedMotion && !modal}
         recovery={recovery}
         camera={camera}
+        guided={autopilot}
         onCamera={manualCamera}
         flight={
           journeyStep

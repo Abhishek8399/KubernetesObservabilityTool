@@ -32,6 +32,16 @@ export interface FlightStop {
     explanation: string;
     exercise: string;
     verify: string;
+    story?: {
+      chapter: string;
+      question: string;
+      answer: string;
+      without: string;
+      create: string;
+      observe: string;
+      next: string;
+      manifest?: string;
+    };
   };
 }
 export interface FlightMission {

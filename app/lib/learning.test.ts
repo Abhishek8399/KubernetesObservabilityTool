@@ -7,18 +7,62 @@ import { visiblePods } from "./lab.ts";
 import { readyBackends } from "./simulation.ts";
 
 test("application milestones have valid questions, solutions, and concrete sandbox evidence", () => {
-  assert.equal(applicationCourse.steps.length, 20);
+  assert.equal(applicationCourse.steps.length, 32);
   for (const s of applicationCourse.steps) {
     assert.ok(conceptById[s.node]);
     const q = s.lesson!;
     assert.ok(q.question && q.explanation && q.exercise && q.verify);
     assert.equal(q.choices.length, 3);
     assert.ok(q.answer >= 0 && q.answer < q.choices.length);
+    assert.ok(
+      q.story?.question &&
+        q.story.answer &&
+        q.story.without &&
+        q.story.create &&
+        q.story.observe &&
+        q.story.next,
+    );
   }
   const order = applicationCourse.steps.map((s) => s.node);
   assert.ok(order.indexOf("deployment") < order.indexOf("controllers"));
   assert.ok(order.indexOf("controllers") < order.indexOf("kubelet"));
   assert.ok(order.indexOf("probes") < order.indexOf("service"));
+});
+test("the beginner story distinguishes a standalone Pod, workload ownership, external access and production safeguards", () => {
+  const deployment = applicationCourse.steps[3].lesson!.story!;
+  assert.match(deployment.answer, /ReplicaSet controller/);
+  assert.match(deployment.without, /restartPolicy/);
+  assert.match(deployment.without, /deleted/);
+  assert.match(
+    applicationCourse.steps[13].lesson!.story!.answer,
+    /IngressClass/,
+  );
+  assert.match(applicationCourse.steps[13].lesson!.story!.answer, /Gateway/);
+  for (const node of [
+    "pvc",
+    "networkpolicy",
+    "serviceaccount",
+    "podsecurity",
+    "tls",
+    "affinity",
+    "pdb",
+    "gitops",
+    "slo",
+    "multicluster",
+  ])
+    assert.ok(applicationCourse.steps.slice(20).some((s) => s.node === node));
+  assert.match(
+    applicationCourse.steps[26].lesson!.story!.answer,
+    /voluntary evictions/,
+  );
+  assert.match(
+    applicationCourse.steps[30].lesson!.story!.without,
+    /regional risk/,
+  );
+  assert.match(
+    applicationCourse.steps.at(-1)!.lesson!.story!.answer,
+    /not a certificate/,
+  );
 });
 test("the learning scene cannot depict application Pods or serving endpoints before their creation", () => {
   const pods = (step: number) =>

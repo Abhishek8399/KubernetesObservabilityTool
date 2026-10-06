@@ -36,7 +36,7 @@ export interface Camera {
   y: number;
   zoom: number;
 }
-type SceneProps = {
+export type SceneProps = {
   scenario: Scenario;
   lab: LabFrame;
   highlights: string[];
@@ -47,6 +47,7 @@ type SceneProps = {
   motion: boolean;
   recovery: boolean;
   camera: Camera;
+  guided?: boolean;
   flight?: {
     visual: FlightVisual | null;
     destination: Point;

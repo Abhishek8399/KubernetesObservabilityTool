@@ -23,6 +23,7 @@ test("local backend owns versioned simulation state, failure progress, repair, a
     ).json();
     assert.equal(course.frame.simulation.ready, 0);
     assert.equal(course.pods.length, 0);
+    assert.equal(course.mission.steps.length, 32);
     const milestone = await (
       await send(`/api/sessions/${course.id}`, "PUT", {
         revision: 0,
@@ -34,6 +35,34 @@ test("local backend owns versioned simulation state, failure progress, repair, a
     ).json();
     assert.equal(milestone.backends, 2);
     assert.equal(milestone.frame.learning.step, 9);
+    const final = await (
+      await send(`/api/sessions/${course.id}`, "PUT", {
+        revision: 1,
+        step: 31,
+        recovery: false,
+        resolved: false,
+        paused: false,
+      })
+    ).json();
+    assert.equal(final.frame.learning.step, 31);
+    assert.equal(final.backends, 4);
+    assert.equal(final.mission.steps[31].lesson.story.chapter, "Production");
+    assert.equal(
+      (
+        await send(`/api/sessions/${course.id}`, "PUT", {
+          revision: 2,
+          step: 32,
+          recovery: false,
+          resolved: false,
+          paused: false,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (await (await send(`/api/sessions/${course.id}`)).json()).step,
+      31,
+    );
     assert.equal(
       (await send("/api/sessions", "POST", { missionId: "invalid" })).status,
       400,

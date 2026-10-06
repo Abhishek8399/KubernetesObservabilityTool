@@ -4,6 +4,7 @@ import "./polish.css";
 import "./universe.css";
 import "./lessons.css";
 import "./flight.css";
+import "./spatial.css";
 
 export const metadata: Metadata = {
   title: "Kubernetes Observatory — Architecture in motion",

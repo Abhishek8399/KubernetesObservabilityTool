@@ -27,6 +27,9 @@ try {
   const { flightMission, resourceAnchor, flightPose } =
     await vite.ssrLoadModule("/app/lib/flight.ts");
   const { default: Deck } = await vite.ssrLoadModule("/app/flight-deck.tsx");
+  const { default: Spatial } = await vite.ssrLoadModule(
+    "/app/spatial-scene.tsx",
+  );
   const { FlightCraft } = await vite.ssrLoadModule(
     "/app/architecture-scene.tsx",
   );
@@ -56,6 +59,78 @@ try {
     );
   };
   const occurrences = (text, marker) => text.split(marker).length - 1;
+  const renderSpatial = (
+    scenario,
+    time,
+    recovery = false,
+    resolved = false,
+    flight,
+  ) => {
+    const lab =
+      scenario === "application"
+        ? applicationFrame(time)
+        : labFrame(scenario, time, recovery, resolved);
+    return renderToStaticMarkup(
+      React.createElement(Spatial, {
+        scenario: scenario === "application" ? "healthy" : scenario,
+        simulation: lab.simulation,
+        lab,
+        highlights: [],
+        selected: null,
+        focus: null,
+        layer: "all",
+        motion: false,
+        recovery,
+        camera: { x: 0, y: 0, zoom: 1 },
+        onCamera() {},
+        onSelect() {},
+        onConnection() {},
+        flight,
+      }),
+    );
+  };
+  for (const [step, count] of [
+    [0, 0],
+    [5, 2],
+    [8, 2],
+    [10, 4],
+    [31, 4],
+  ]) {
+    const svg = renderSpatial("application", step);
+    assert.equal(occurrences(svg, 'data-spatial-resource="pods"'), count);
+    assert.equal(occurrences(svg, 'data-spatial-plane="'), 8);
+    assert.ok(!svg.includes("NaN") && !svg.includes("Infinity"));
+  }
+  assert.equal(
+    occurrences(renderSpatial("application", 8), 'data-spatial-endpoint="'),
+    0,
+  );
+  const connected = renderSpatial("application", 10);
+  assert.equal(occurrences(connected, 'data-service-owner="api"'), 2);
+  assert.equal(occurrences(connected, 'data-service-owner="frontend"'), 2);
+  assert.match(
+    renderSpatial("pod-failure", 4),
+    /data-spatial-resource="pods"[^>]*data-state="lost"/,
+  );
+  assert.match(
+    renderSpatial("pod-failure", 12),
+    /data-spatial-resource="pods"[^>]*data-state="starting"/,
+  );
+  assert.equal(
+    occurrences(renderSpatial("pod-failure", 4), 'data-spatial-endpoint="'),
+    5,
+  );
+  assert.equal(
+    occurrences(renderSpatial("pod-failure", 28), 'data-spatial-endpoint="'),
+    6,
+  );
+  assert.match(
+    renderSpatial("zone-failure", 4),
+    /data-spatial-resource="node-b"[^>]*data-state="offline"/,
+  );
+  assert.ok(renderSpatial("traffic-spike", 28).includes("ADDED NODE 4"));
+  assert.ok(!renderSpatial("region-failure", 28, false).includes("STANDBY 1"));
+  assert.ok(renderSpatial("region-failure", 28, true).includes("STANDBY 6"));
   assert.equal(occurrences(render("application", 0), 'data-pod="'), 0);
   assert.equal(
     occurrences(render("application", 5), 'data-pod-state="starting"'),
@@ -263,6 +338,10 @@ try {
     }),
   );
   assert.ok(courseDeck.includes("Check understanding"));
+  assert.ok(courseDeck.includes("Should I create a Pod or a Deployment?"));
+  assert.ok(courseDeck.includes("What if I skip this"));
+  assert.ok(courseDeck.includes("Application journey chapters"));
+  assert.ok(courseDeck.includes("Example YAML"));
   assert.ok(courseDeck.includes("Maintain") || courseDeck.includes("maintain"));
   assert.match(courseDeck, /class="flight-play" disabled=""/);
   const { default: Universe } = await vite.ssrLoadModule("/app/universe.tsx");
@@ -271,6 +350,8 @@ try {
   assert.ok(firstView.includes("Explain connection:"));
   assert.ok(firstView.includes("Background soundtrack volume"));
   assert.ok(firstView.includes("71-stop expedition"));
+  assert.ok(firstView.includes("Rotate architecture"));
+  assert.ok(firstView.includes("Separate architecture layers"));
   assert.equal(diagnostics.length, 0, diagnostics[0]?.slice(0, 250));
   console.log(
     "Rendered SVG verified: lost and starting Pod, zone outage, withdrawn routes, capacity growth, rollout versions, explicit repairs and independent standby.",

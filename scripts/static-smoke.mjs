@@ -48,6 +48,10 @@ for (const marker of [
   "71-stop expedition",
   "Check understanding",
   "From my application to Kubernetes",
+  "Separate architecture layers",
+  "Rotate architecture",
+  "What if I skip this or choose the wrong approach?",
+  "Application journey chapters",
 ])
   assert.ok(js.includes(marker), `Missing content: ${marker}`);
 assert.ok(css.includes("prefers-reduced-motion"));

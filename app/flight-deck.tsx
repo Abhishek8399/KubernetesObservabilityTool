@@ -35,7 +35,7 @@ export default function FlightDeck(p: {
   const stop = p.mission.steps[p.step],
     c = conceptById[stop.node];
   const last = p.step === p.mission.steps.length - 1;
-  const arrived = p.visual?.progress === 1;
+  const arrived = p.visual?.progress === 1 && !p.visual.previous;
   const status = !p.autopilot
     ? "MANUAL CAMERA"
     : p.paused
@@ -125,6 +125,11 @@ export default function FlightDeck(p: {
         <button onClick={p.onOverview}>
           <Icon name="expand" size={14} /> Explore the map
         </button>
+        {!!stop.lesson && !p.autopilot && (
+          <button onClick={() => p.onStep(p.step)}>
+            <Icon name="orbit" size={14} /> Return to this milestone
+          </button>
+        )}
         {p.mission.id.startsWith("lab:") && (
           <button onClick={p.onLab}>
             <Icon name="pulse" size={14} /> Open incident controls
@@ -143,6 +148,36 @@ export default function FlightDeck(p: {
         className="flight-caption"
         aria-label="Flight resource explanation"
       >
+        {stop.lesson?.story && (
+          <nav
+            className="story-chapters"
+            aria-label="Application journey chapters"
+          >
+            {[
+              ...new Set(
+                p.mission.steps
+                  .map((s) => s.lesson?.story?.chapter)
+                  .filter(Boolean),
+              ),
+            ].map((chapter) => (
+              <button
+                key={chapter}
+                aria-current={
+                  stop.lesson?.story?.chapter === chapter ? "step" : undefined
+                }
+                onClick={() =>
+                  p.onStep(
+                    p.mission.steps.findIndex(
+                      (s) => s.lesson?.story?.chapter === chapter,
+                    ),
+                  )
+                }
+              >
+                {chapter}
+              </button>
+            ))}
+          </nav>
+        )}
         <div className="flight-caption-heading">
           <span>
             <i /> {stop.phase.toUpperCase()}

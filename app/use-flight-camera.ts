@@ -11,6 +11,9 @@ export interface FlightVisual {
   progress: number;
   travelProgress: number;
   phase: string;
+  initialZoom: number;
+  camera: FlightCamera;
+  previous?: boolean;
 }
 const flightDuration = 3400;
 
@@ -93,11 +96,23 @@ export function useFlightCamera({
         p.elapsed / flightDuration,
       );
       onCamera(pose.camera);
-      setVisual({ ...pose, key: p.key, from: p.from, to: p.to });
+      setVisual({
+        ...pose,
+        key: p.key,
+        from: p.from,
+        to: p.to,
+        initialZoom: p.camera.zoom,
+      });
       if (p.elapsed < flightDuration) handle = requestAnimationFrame(tick);
     }
     handle = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(handle);
   }, [enabled, paused, reducedMotion, stopKey, x, y, onCamera]);
-  return visual?.key === stopKey ? visual : null;
+  // Keep the last pose until the next animation frame installs a new plan.
+  // Returning null here would briefly frame the new destination before departure.
+  return visual?.key === stopKey
+    ? visual
+    : visual
+      ? { ...visual, previous: true }
+      : null;
 }

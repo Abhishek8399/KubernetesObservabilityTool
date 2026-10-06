@@ -28,7 +28,9 @@ The frontend runs smooth, finite camera flights. The backend owns versioned, iso
 
 ## Start with your own application
 
-The primary launch opens **From my application to Kubernetes**, a guided story with 20 milestones. It starts with your frontend and API container inventory, then covers cluster ownership, namespace, Deployment, API admission, controllers, scheduling, node startup, readiness, Service discovery, frontend routing, configuration, credentials, external routing, resources, scaling, observability, Pod loss, releases, and recovery.
+The primary launch opens **From my application to Kubernetes**, a guided story with **32 milestones** across Prepare, Run, Connect, Operate, Protect, Resilience and Production. It starts with a working frontend/API application, compares a standalone Pod with a Deployment, follows acceptance and startup, and builds toward public routing, security, capacity, controlled maintenance and evidence-based recovery.
+
+Every stage starts with an everyday question, gives the decision and its reason, explains what happens if it is skipped, identifies the objects or configuration to create, and describes what to observe. Expand each question to read the consequence or next action. Selected milestones also include illustrative YAML, with placeholder images and implementation prerequisites clearly identified. Ingress/controller/IngressClass and Gateway API alternatives are explained without choosing a cloud vendor.
 
 Each milestone has three sections: **Understand**, **Check understanding**, and **Practice in a sandbox**. Answering correctly unlocks the next milestone. Checked answers are stored in your browser; returning to the application journey resumes at the first unchecked milestone. Direct destination selection remains available for review.
 
@@ -37,6 +39,10 @@ The scene starts with zero application Pods. It shows two starting API replicas 
 Understanding checks measure conceptual learning. The final practice plan asks for real sandbox evidence, including deployment, routing, failures, scaling, rollback, and restore. Completion is not a claim of production expertise, and the app does not run the displayed kubectl commands.
 
 ## Cinematic voyages
+
+The main diagram uses perspective projection of three-dimensional vertices with depth-sorted geometry, rendered as accessible SVG. It does not require WebGL or a new graphics dependency. Drag to orbit, adjust tilt, vertically separate the layers, or isolate a responsibility. Foundation, control plane and worker data plane are distinguished from the teaching layers for delivery, traffic, security, data and operations. These additional layers are not claims that Kubernetes requires separate formal planes or clusters.
+
+The ship, curved course, destination marker and guided camera share the same 3D coordinates. Flights pull back, ascend or descend through space, and approach the resource. Manual orbit remains available while travelling; zoom switches to manual exploration. Near-camera geometry is clipped to avoid projecting resources behind the camera into the foreground. The retained isometric renderer supports existing explanatory resource previews and regression checks.
 
 - Choose **Request** to fly with a request. The camera pulls back, follows a travelling ship, and moves in at each destination. DNS discovery is distinguished from HTTP forwarding; a separate return leg carries the response back to the client.
 - Each stop explains **why the resource exists** and **what happens here**. Pause to read, move forward/backward, choose any stop from the flight plan, or open the resource popup.

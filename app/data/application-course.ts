@@ -1,4 +1,182 @@
 import type { FlightMission, FlightStop } from "../lib/flight";
+import { applicationStories } from "./application-story.ts";
+
+const productionChecks = [
+  {
+    node: "pvc",
+    question:
+      "Does replacing a Pod automatically recover files from its writable container layer?",
+    choices: [
+      "No; durable state needs deliberately configured persistence and recovery",
+      "Yes, a Deployment copies all files",
+      "Only when the Service uses port 80",
+    ],
+    answer: 0,
+    exercise:
+      "Prepare a sandbox PVC using an approved StorageClass. Verify access modes, binding, volume placement and persistence through Pod replacement.",
+    verify:
+      "kubectl get pvc -n learning; verify test data after replacing only a disposable sandbox Pod.",
+  },
+  {
+    node: "networkpolicy",
+    question: "What makes a NetworkPolicy actually control traffic?",
+    choices: [
+      "Naming the namespace secure",
+      "An enforcing network implementation and correctly selected allow/deny rules",
+      "Creating another ReplicaSet",
+    ],
+    answer: 1,
+    exercise:
+      "Document intended flows and required DNS. Review default-deny and narrow allow policies together before testing in an isolated sandbox.",
+    verify:
+      "Demonstrate one required permitted flow and one intentionally denied flow; inspect policy selectors and implementation support.",
+  },
+  {
+    node: "serviceaccount",
+    question:
+      "Should an application receive cluster-admin simply because it runs in Kubernetes?",
+    choices: [
+      "Yes, every Pod needs administrator access",
+      "Only if it has two replicas",
+      "No; grant only genuinely required API actions or no API access",
+    ],
+    answer: 2,
+    exercise:
+      "Review the workload ServiceAccount, token mounting and role bindings. Use an approved identity path for external dependencies.",
+    verify:
+      "Review least-privilege API permissions and confirm unnecessary Secret-read or workload-modification actions are absent.",
+  },
+  {
+    node: "podsecurity",
+    question:
+      "What is a reasonable response when application hardening fails in staging?",
+    choices: [
+      "Disable all cluster policies",
+      "Identify the required capability or writable path and adapt the image/template narrowly",
+      "Give every container a host filesystem mount",
+    ],
+    answer: 1,
+    exercise:
+      "Adapt the container for non-root execution, restricted capabilities and compatible filesystem behavior. Validate admission and runtime behavior in staging.",
+    verify:
+      "Check admission events and complete user-path behavior with the intended securityContext; do not weaken unrelated workloads.",
+  },
+  {
+    node: "tls",
+    question:
+      "Does HTTPS alone authorize which user can access application data?",
+    choices: [
+      "Yes",
+      "Only when the certificate is renewed",
+      "No; connection protection and application authorization are separate responsibilities",
+    ],
+    answer: 2,
+    exercise:
+      "Review HTTPS termination, hostname/certificate delivery and renewal. Test application authentication and forbidden user actions separately.",
+    verify:
+      "Verify certificate validity, HTTPS routing, renewal monitoring and rejection of unauthorized application operations.",
+  },
+  {
+    node: "affinity",
+    question:
+      "Do several replicas guarantee that one node or zone loss will leave capacity available?",
+    choices: [
+      "No; placement, real failure domains, spare capacity and data paths must support it",
+      "Yes, replica count is sufficient",
+      "Only if each Pod has a different name",
+    ],
+    answer: 0,
+    exercise:
+      "Inspect actual node/zone labels, choose justified topology rules and verify eligible spare capacity before a disposable zone-loss exercise.",
+    verify:
+      "kubectl get pods -n learning -o wide; compare node zone labels and observe surviving capacity in the zone-loss flight.",
+  },
+  {
+    node: "pdb",
+    question:
+      "Which event does a PDB constrain when its requirements can be met?",
+    choices: [
+      "An involuntary power loss",
+      "A supported voluntary eviction using the Eviction API",
+      "Every Deployment rolling update",
+    ],
+    answer: 1,
+    exercise:
+      "Prepare a PDB from measured serving requirements. Review allowed disruptions and a safe sandbox maintenance procedure.",
+    verify:
+      "kubectl get pdb -n learning; distinguish blocked voluntary eviction from an involuntary failure or Deployment rollout.",
+  },
+  {
+    node: "probes",
+    question: "What makes a replica's termination safer for active requests?",
+    choices: [
+      "Immediately exiting without handling signals",
+      "Only a longer YAML file",
+      "Tested shutdown, bounded in-flight work and appropriate grace/connection-draining behavior",
+    ],
+    answer: 2,
+    exercise:
+      "Test SIGTERM handling and a sandbox rollout under representative traffic. Measure errors and shutdown duration instead of assuming a sleep hook guarantees safety.",
+    verify:
+      "Confirm request behavior during termination, replacement readiness and the application's actual grace-period compliance.",
+  },
+  {
+    node: "gitops",
+    question: "What best makes a release reproducible and reviewable?",
+    choices: [
+      "Mutable image tags and undocumented changes",
+      "Reviewed configuration, immutable artifacts and a scoped release process",
+      "Creating all production Pods manually",
+    ],
+    answer: 1,
+    exercise:
+      "Trace one sandbox release from source and image digest through reviewed configuration, scoped deployment identity and rollback/roll-forward decision.",
+    verify:
+      "Match the running image and configuration to the reviewed release; verify rollout and successful user operations.",
+  },
+  {
+    node: "slo",
+    question: "Which signal best describes the reliability users experience?",
+    choices: [
+      "Only the existence of a dashboard",
+      "Only the number of machines",
+      "Success and latency of a defined user operation measured over an agreed window",
+    ],
+    answer: 2,
+    exercise:
+      "Define a user-path SLI/SLO, alert owner and runbook. Introduce a single sandbox failure and record user impact, alert and recovery evidence.",
+    verify:
+      "Compare request success/latency with the SLO and demonstrate an actionable alert and an owned recovery procedure.",
+  },
+  {
+    node: "multicluster",
+    question: "What must exist for meaningful recovery from whole-region loss?",
+    choices: [
+      "Separate recovery capacity, compatible configuration, data recovery and traffic switching",
+      "More Pods in the failed region",
+      "A PDB in the primary namespace",
+    ],
+    answer: 0,
+    exercise:
+      "Document the standby/recovery design, data consistency, secrets/images, traffic switching and failback. Run the region-loss lesson with and without standby.",
+    verify:
+      "Record measured restoration time and data freshness during an isolated recovery rehearsal; primary failure must not imply automatic standby creation.",
+  },
+  {
+    node: "slo",
+    question: "What demonstrates readiness beyond completing this course?",
+    choices: [
+      "A screenshot showing green resources",
+      "Observed sandbox results and an owned readiness review covering release, routing, security, failures and recovery",
+      "Knowing every abbreviation by memory",
+    ],
+    answer: 1,
+    exercise:
+      "Produce a sandbox evidence log for deployment, service/external routing, Pod loss, rollout, scaling, security boundaries, dependency diagnosis and a tested restore.",
+    verify:
+      "Record commands, observed behavior, failure impact, ownership, rollback procedure and measured outcomes. Review unresolved risks with the operating team.",
+  },
+];
 function lesson(
   node: string,
   title: string,
@@ -26,7 +204,7 @@ function lesson(
 export const applicationCourse: FlightMission = {
   id: "application",
   title: "From my application to Kubernetes",
-  label: "APPLICATION / 20 LEARNING MILESTONES",
+  label: "APPLICATION / 32 LEARNING MILESTONES",
   steps: [
     lesson(
       "registry",
@@ -307,7 +485,7 @@ export const applicationCourse: FlightMission = {
     ),
     lesson(
       "backup",
-      "Finish with recovery evidence and the next practice plan",
+      "Separate data recovery from replica replacement",
       "Back up durable data, test restores, and define RTO/RPO. Independent regional recovery requires separate capacity, data recovery, and routing. You now have an application-to-operations map; the next milestone is proving it on a real sandbox cluster.",
       "What demonstrates recovery readiness?",
       [
@@ -320,5 +498,22 @@ export const applicationCourse: FlightMission = {
       "Build a sandbox evidence log: deployment, service routing, Pod loss, rollout, scaling, denied traffic, dependency failure, and a restore.",
       "Record commands, observations, ownership, rollback steps, and measured results for every exercise.",
     ),
-  ],
+    ...productionChecks.map((check, index) => {
+      const story = applicationStories[index + 20];
+      return lesson(
+        check.node,
+        story.question,
+        story.answer,
+        check.question,
+        check.choices,
+        check.answer,
+        story.without,
+        check.exercise,
+        check.verify,
+      );
+    }),
+  ].map((stop, index) => ({
+    ...stop,
+    lesson: { ...stop.lesson!, story: applicationStories[index] },
+  })),
 };

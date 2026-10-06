@@ -22,7 +22,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Verify source and simulation behavior
-        run: npm run typecheck && npm run lint && npm test
+        run: npm run typecheck && npm run lint && npm test && npm run smoke:scene
       - name: Build static site
         run: npm run build:static
         env:

@@ -4,6 +4,7 @@ import Explorer from "./universe";
 import "./explorer.css";
 import "./polish.css";
 import "./universe.css";
+import "./lessons.css";
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Explorer />

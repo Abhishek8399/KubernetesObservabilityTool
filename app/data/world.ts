@@ -240,6 +240,7 @@ export function flowDenied(
 ): boolean {
   if (link.kind !== "traffic") return false;
   if (s.nodes === 0) return !["waf", "loadbalancer"].includes(link.to);
+  if (s.serviceAvailable) return false;
   if (scenario === "dependency-outage") return link.to === "database";
   if (scenario === "policy-block") return link.to === "pods";
   return false;
@@ -252,8 +253,11 @@ export function componentUnavailable(
 ): boolean {
   return (
     (s.nodes === 0 &&
-      ["control", "network", "workload"].includes(node.layer)) ||
-    (node.id === "database" && scenario === "dependency-outage")
+      (["control", "network", "workload", "security"].includes(node.layer) ||
+        ["pvc", "hpa"].includes(node.id))) ||
+    (node.id === "database" &&
+      scenario === "dependency-outage" &&
+      !s.serviceAvailable)
   );
 }
 export const worldLinks: WorldLink[] = [

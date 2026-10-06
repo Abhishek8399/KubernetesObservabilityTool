@@ -89,3 +89,26 @@ test("a dependency outage blocks its boundary while client-to-Pod traffic remain
     true,
   );
 });
+
+test("primary API-dependent resources cannot stay available after regional loss", () => {
+  const s = simulate("region-failure", 12, true);
+  for (const id of ["api", "hpa", "rbac", "networkpolicy", "pvc"]) {
+    assert.equal(
+      componentUnavailable(
+        worldNodes.find((node) => node.id === id)!,
+        "region-failure",
+        s,
+      ),
+      true,
+      id,
+    );
+  }
+  assert.equal(
+    componentUnavailable(
+      worldNodes.find((node) => node.id === "dr")!,
+      "region-failure",
+      s,
+    ),
+    false,
+  );
+});

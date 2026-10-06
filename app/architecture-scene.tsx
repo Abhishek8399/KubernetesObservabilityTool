@@ -13,12 +13,16 @@ import {
   flowDenied,
   componentUnavailable,
   type WorldNode,
+  type WorldLink,
 } from "./data/world";
 import {
   zoneReadyCounts,
   type Simulation,
   type Scenario,
 } from "./lib/simulation";
+
+import { explainConnection } from "./data/connections";
+import { visiblePods, type LabFrame } from "./lib/lab";
 
 export interface Camera {
   x: number;
@@ -27,6 +31,8 @@ export interface Camera {
 }
 type SceneProps = {
   scenario: Scenario;
+  lab: LabFrame;
+  highlights: string[];
   simulation: Simulation;
   selected: string | null;
   focus: string | null;
@@ -36,6 +42,7 @@ type SceneProps = {
   camera: Camera;
   onCamera: (camera: Camera) => void;
   onSelect: (id: string) => void;
+  onConnection: (link: WorldLink) => void;
 };
 const coordinates = Object.fromEntries(
   worldNodes.map((n) => [n.id, { x: n.x, y: n.y }]),
@@ -402,6 +409,8 @@ export default function ArchitectureScene(props: SceneProps) {
     onSelect,
   } = props;
   const regionLost = s.nodes === 0;
+  const actorActive = (id: string) =>
+    props.highlights.includes(id) || focus === id;
   useEffect(() => {
     const element = svg.current;
     if (!element) return;
@@ -424,7 +433,7 @@ export default function ArchitectureScene(props: SceneProps) {
       x: e.clientX,
       y: e.clientY,
       camera,
-      ratio: Math.max(1800 / box.width, 1160 / box.height),
+      ratio: Math.max(1800 / box.width, 1060 / box.height),
     };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
@@ -447,7 +456,7 @@ export default function ArchitectureScene(props: SceneProps) {
     <svg
       ref={svg}
       className={`universe-scene ${motion ? "" : "motion-off"}`}
-      viewBox="0 0 1800 1160"
+      viewBox="0 100 1800 1060"
       aria-label="Kubernetes architecture world. Drag the background to pan; use zoom controls or Control plus scroll."
       onPointerDown={pointerDown}
       onPointerMove={pointerMove}
@@ -481,7 +490,7 @@ export default function ArchitectureScene(props: SceneProps) {
           strokeDasharray="3 12"
         />
         <text x="680" y="132" className="region-label">
-          01 / PRIMARY CLUSTER
+          {regionLost ? "PRIMARY CLUSTER OFFLINE" : "KUBERNETES CLUSTER"}
         </text>
         <text x="680" y="153" className="region-sub">
           Logical architecture · illustrative failure domains
@@ -492,7 +501,7 @@ export default function ArchitectureScene(props: SceneProps) {
           w={485}
           d={185}
           color="#b8a3ff"
-          label="CONTROL PLANE / DESIRED STATE"
+          label="01 ? CONTROL PLANE: KEEP DESIRED STATE"
         />
         <Platform
           x={1100}
@@ -500,7 +509,7 @@ export default function ArchitectureScene(props: SceneProps) {
           w={535}
           d={150}
           color="#67dfd0"
-          label="NETWORKING / IMPLEMENTED DATA PLANE"
+          label="02 ? NETWORK: ROUTE TO READY BACKENDS"
         />
         <Platform x={1100} y={855} w={530} d={182} color="#89b4ff" />
         <text
@@ -510,82 +519,228 @@ export default function ArchitectureScene(props: SceneProps) {
           className="platform-label"
           fill="#8db9e7"
         >
-          WORKER POOL / APPLICATION CAPACITY
+          03 ? WORKER POOL: RUN APPLICATION CONTAINERS
         </text>
         <g className="world-connections">
-          {worldLinks.map((link, index) => {
-            const a = coordinates[link.from],
-              b = coordinates[link.to],
-              traffic = link.kind === "traffic",
-              active = focus && (focus === link.from || focus === link.to);
-            const denied = flowDenied(link, props.scenario, s);
-            const d = `M${a.x} ${a.y + 12}C${a.x} ${(a.y + b.y) / 2 + 45} ${b.x} ${(a.y + b.y) / 2 + 45} ${b.x} ${b.y + 12}`;
-            return (
-              <g
-                key={`${link.from}-${link.to}`}
-                className={`world-link ${link.kind} ${active ? "link-active" : ""} ${denied ? "link-denied" : ""}`}
-              >
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={
-                    denied
-                      ? "#ef829c"
-                      : traffic
-                        ? "#7de8d4"
+          {worldLinks
+            .filter((link) => !(link.from === "service" && link.to === "pods"))
+            .map((link, index) => {
+              const a = coordinates[link.from],
+                b = coordinates[link.to],
+                traffic = link.kind === "traffic",
+                active = actorActive(link.from) || actorActive(link.to);
+              const denied = flowDenied(link, props.scenario, s);
+              const d = `M${a.x} ${a.y + 12}C${a.x} ${(a.y + b.y) / 2 + 45} ${b.x} ${(a.y + b.y) / 2 + 45} ${b.x} ${b.y + 12}`;
+              return (
+                <g
+                  key={`${link.from}-${link.to}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Explain connection: ${explainConnection(link).title}`}
+                  onClick={() => props.onConnection(link)}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      props.onConnection(link);
+                    }
+                  }}
+                  className={`connection-focus world-link ${link.kind} ${active ? "link-active" : ""} ${denied ? "link-denied" : ""}`}
+                >
+                  <title>{`${explainConnection(link).title}: ${explainConnection(link).body}`}</title>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth="16"
+                    className="wire-hit-target"
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={
+                      denied
+                        ? "#ef829c"
+                        : traffic
+                          ? "#7de8d4"
+                          : link.kind === "control"
+                            ? "#b8a3ff"
+                            : "#819cba"
+                    }
+                    strokeOpacity={active ? 0.9 : traffic ? 0.5 : 0.2}
+                    strokeWidth={active ? 2.5 : 1.4}
+                    strokeDasharray={
+                      traffic
+                        ? undefined
                         : link.kind === "control"
-                          ? "#b8a3ff"
-                          : "#819cba"
-                  }
-                  strokeOpacity={active ? 0.9 : traffic ? 0.5 : 0.2}
-                  strokeWidth={active ? 2.5 : 1.4}
-                  strokeDasharray={
-                    traffic
-                      ? undefined
-                      : link.kind === "control"
-                        ? "5 6"
-                        : "2 7"
-                  }
-                />
-                {traffic && !denied && motion && (
-                  <circle
-                    r={active ? 3.5 : 2.5}
-                    fill="#adf6e4"
-                    filter="url(#bloom)"
-                  >
-                    <animateMotion
-                      dur={`${3 + (index % 3)}s`}
-                      repeatCount="indefinite"
-                      path={d}
-                      begin={`${-index * 0.7}s`}
-                    />
-                  </circle>
-                )}
-              </g>
-            );
-          })}
+                          ? "5 6"
+                          : "2 7"
+                    }
+                  />
+                  {link.kind === "control" &&
+                    props.lab.index === 2 &&
+                    active &&
+                    motion && (
+                      <rect
+                        x="-3"
+                        y="-3"
+                        width="6"
+                        height="6"
+                        rx="1"
+                        fill="#d1baff"
+                      >
+                        <animateMotion
+                          path={d}
+                          dur="4s"
+                          repeatCount="indefinite"
+                          begin={`${-index * 0.3}s`}
+                        />
+                      </rect>
+                    )}
+                  {traffic && !denied && motion && (
+                    <circle
+                      r={active ? 3.5 : 2.5}
+                      fill="#adf6e4"
+                      filter="url(#bloom)"
+                    >
+                      <animateMotion
+                        dur={`${3 + (index % 3)}s`}
+                        repeatCount="indefinite"
+                        path={d}
+                        begin={`${-index * 0.7}s`}
+                      />
+                    </circle>
+                  )}
+                </g>
+              );
+            })}
           {recovery && (
             <path
               d="M505 602C620 1120 1400 1140 1640 1000"
               fill="none"
               stroke="#8bdbac"
-              strokeWidth={s.secondaryActive ? 2.5 : 1}
+              strokeWidth={s.secondaryActive ? 5 : 1}
               strokeOpacity={s.secondaryActive ? 0.8 : 0.25}
               strokeDasharray="6 8"
               className={s.secondaryActive ? "standby-flow" : ""}
             />
           )}
         </g>
+        <g
+          className="endpoint-routes"
+          aria-label="Service backends selected by readiness"
+        >
+          {[810, 1100, 1390].flatMap((x, zone) =>
+            visiblePods(props.scenario, props.lab, zone).map((pod) => {
+              const px = pod.slot % 2 === 0 ? 16 : 78,
+                py = pod.slot < 2 ? -4 : 44;
+              const targetX = x + px,
+                targetY = 835 + py - 25;
+              const serving =
+                pod.state === "ready" &&
+                !flowDenied(
+                  { from: "service", to: "pods", kind: "traffic" },
+                  props.scenario,
+                  s,
+                );
+              const d = `M965 512C965 665 ${targetX} 685 ${targetX} ${targetY}`;
+              return (
+                <g
+                  key={pod.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Explain Service endpoint ${pod.id}`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() =>
+                    props.onConnection({
+                      from: "service",
+                      to: "pods",
+                      kind: "traffic",
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      props.onConnection({
+                        from: "service",
+                        to: "pods",
+                        kind: "traffic",
+                      });
+                    }
+                  }}
+                  data-endpoint={pod.id}
+                  data-state={
+                    serving
+                      ? "serving"
+                      : pod.state === "ready"
+                        ? "blocked"
+                        : "withdrawn"
+                  }
+                >
+                  <title>{`${pod.id}: ${serving ? "Ready endpoint receives requests" : "Not eligible for this request path"}`}</title>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth="13"
+                    className="wire-hit-target"
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={
+                      serving
+                        ? "#79dcbf"
+                        : pod.state === "starting" || pod.state === "pending"
+                          ? "#f0c27a"
+                          : "#f5849e"
+                    }
+                    strokeOpacity={serving ? 0.5 : 0.24}
+                    strokeWidth={serving ? 2 : 1.5}
+                    strokeDasharray={serving ? undefined : "5 9"}
+                  />
+                  {serving && motion && (
+                    <circle r="3" fill="#b5f7d7">
+                      <animateMotion
+                        path={d}
+                        dur={props.scenario === "traffic-spike" ? "1.4s" : "3s"}
+                        repeatCount="indefinite"
+                        begin={`${-pod.slot * 0.6 - zone * 0.8}s`}
+                      />
+                    </circle>
+                  )}
+                  {!serving && (
+                    <path
+                      d={`M${targetX - 6} ${targetY - 6}l12 12m0-12-12 12`}
+                      stroke={
+                        pod.state === "pending" || pod.state === "starting"
+                          ? "#efc57c"
+                          : "#f5849e"
+                      }
+                      strokeWidth="2"
+                    />
+                  )}
+                </g>
+              );
+            }),
+          )}
+        </g>
         {worldNodes
           .filter((n) => n.id !== "dr" || recovery)
           .map((n) => {
-            const current = selected === n.id || focus === n.id,
+            const current = selected === n.id || actorActive(n.id),
               faded = layer !== "all" && n.layer !== layer;
             const failed = componentUnavailable(n, props.scenario, s);
             const blocked =
-              n.id === "networkpolicy" && props.scenario === "policy-block";
+              n.id === "networkpolicy" &&
+              props.scenario === "policy-block" &&
+              !s.serviceAvailable;
             return (
               <g
+                data-component={n.id}
+                data-state={
+                  failed ? "unavailable" : blocked ? "denying" : "available"
+                }
                 key={n.id}
                 transform={`translate(${n.x} ${n.y})`}
                 {...selectable(n.id, conceptById[n.id].title, onSelect)}
@@ -593,7 +748,7 @@ export default function ArchitectureScene(props: SceneProps) {
                 style={{ "--object-color": getColor(n.layer) } as CSSProperties}
               >
                 <title>
-                  {conceptById[n.id].title}: {conceptById[n.id].summary}
+                  {`${conceptById[n.id].title}: ${conceptById[n.id].summary}`}
                 </title>
                 {current && (
                   <>
@@ -619,16 +774,84 @@ export default function ArchitectureScene(props: SceneProps) {
                     />
                   </>
                 )}
-                <Artifact shape={n.shape} layer={n.layer} />
-                <text y="46" textAnchor="middle" className="object-title">
+                {failed && (
+                  <ellipse cy="-42" rx="63" ry="66" className="fault-aura" />
+                )}
+                {n.id === "dr" ? (
+                  <g
+                    className={`standby-cluster ${s.secondaryActive ? "standby-promoted" : "standby-waiting"}`}
+                  >
+                    <Platform x={0} y={-4} w={118} d={47} color="#8bdbac" />
+                    <g transform="translate(-60 -8)">
+                      <Artifact shape="tower" layer="operations" />
+                    </g>
+                    {[0, 1, 2, 3, 4, 5].map((index) => (
+                      <g
+                        key={index}
+                        transform={`translate(${(index % 3) * 34} ${index < 3 ? -20 : 13}) scale(.4)`}
+                        data-standby-backend={index + 1}
+                        data-state={
+                          s.secondaryActive ? "serving" : "not-promoted"
+                        }
+                      >
+                        <Artifact shape="cube" layer="operations" />
+                        <circle
+                          cy="-66"
+                          r="5"
+                          fill={s.secondaryActive ? "#c5ffd2" : "#a6a086"}
+                        />
+                      </g>
+                    ))}
+                    <text
+                      y="-138"
+                      textAnchor="middle"
+                      className="standby-label"
+                    >
+                      SEPARATE CLUSTER
+                    </text>
+                  </g>
+                ) : (
+                  <Artifact shape={n.shape} layer={n.layer} />
+                )}
+                {current &&
+                  props.lab.index === 2 &&
+                  ["controllers", "scheduler", "hpa"].includes(n.id) && (
+                    <g className="actor-working">
+                      <ellipse
+                        cy="-38"
+                        rx="55"
+                        ry="25"
+                        fill="none"
+                        stroke="#c5afff"
+                        strokeWidth="3"
+                        strokeDasharray="7 9"
+                      />
+                      <text y="-111" textAnchor="middle">
+                        {n.id === "controllers"
+                          ? "RECONCILING"
+                          : n.id === "scheduler"
+                            ? "PLACING PODS"
+                            : `DESIRED: ${s.desired}`}
+                      </text>
+                    </g>
+                  )}
+                <text
+                  y={n.id === "dr" ? 80 : 46}
+                  textAnchor="middle"
+                  className="object-title"
+                >
                   {n.label}
                 </text>
-                <text y="66" textAnchor="middle" className="object-subtitle">
+                <text
+                  y={n.id === "dr" ? 100 : 66}
+                  textAnchor="middle"
+                  className="object-subtitle"
+                >
                   {n.sub}
                 </text>
                 {failed && (
                   <text y="-110" textAnchor="middle" className="failure-label">
-                    UNAVAILABLE
+                    {n.id === "database" ? "DEPENDENCY DOWN" : "OFFLINE"}
                   </text>
                 )}
                 {blocked && (
@@ -645,24 +868,49 @@ export default function ArchitectureScene(props: SceneProps) {
             );
           })}
         {[810, 1100, 1390].map((x, zone) => {
-          const failed = regionLost || s.failedZone === zone;
-          const count = zoneReadyCounts(s)[zone];
+          const failed = regionLost || s.failedZone === zone,
+            count = zoneReadyCounts(s)[zone];
           return (
             <g
               key={zone}
               transform={`translate(${x} 835)`}
               className={`worker-island ${failed ? "zone-failed" : ""} ${layer !== "all" && layer !== "workload" ? "object-faded" : ""}`}
+              data-zone={String.fromCharCode(65 + zone)}
+              data-state={failed ? "offline" : "available"}
             >
               <Platform
                 x={0}
                 y={12}
                 w={129}
                 d={68}
-                color={failed ? "#e48198" : "#81accf"}
+                color={failed ? "#f488a4" : "#81accf"}
               />
+              {failed && (
+                <g className="zone-failure-banner">
+                  <path
+                    d="M-129 12 0-56 129 12 0 80Z"
+                    fill="#f2709433"
+                    stroke="#f98aa8"
+                    strokeWidth="3"
+                  />
+                  <text y="-131" textAnchor="middle">
+                    ZONE {String.fromCharCode(65 + zone)} OFFLINE
+                  </text>
+                  <text
+                    y="-107"
+                    textAnchor="middle"
+                    className="zone-failure-sub"
+                  >
+                    {regionLost
+                      ? "Primary region lost"
+                      : "Node and 2 Pods unavailable"}
+                  </text>
+                </g>
+              )}
               <g
                 transform="translate(-56 -10)"
-                className="scene-object"
+                className="scene-object worker-node"
+                data-node-state={failed ? "offline" : "ready"}
                 {...selectable(
                   "nodes",
                   `worker node in zone ${zone + 1}`,
@@ -670,41 +918,68 @@ export default function ArchitectureScene(props: SceneProps) {
                 )}
               >
                 <Artifact shape="tower" layer="workload" />
+                {failed && (
+                  <path
+                    d="M-23-63 23-17m0-46-46 46"
+                    stroke="#ffacc0"
+                    strokeWidth="5"
+                  />
+                )}
                 <text x="-12" y="39" className="worker-label">
                   NODE {zone + 1}
                 </text>
               </g>
-              {[0, 1, 2, 3].map((slot) => {
-                const visible = slot < Math.max(count, 2),
-                  ready = slot < count;
-                if (!visible) return null;
-                const px = slot % 2 === 0 ? 28 : 71,
-                  py = slot < 2 ? -15 : 22;
+              {visiblePods(props.scenario, props.lab, zone).map((pod) => {
+                const px = pod.slot % 2 === 0 ? 16 : 78,
+                  py = pod.slot < 2 ? -4 : 44;
                 return (
                   <g
-                    key={slot}
-                    transform={`translate(${px} ${py}) scale(.44)`}
-                    className={`scene-object pod-artifact ${ready ? "pod-ready" : "pod-unready"} ${selected === "pods" || focus === "pods" ? "object-active" : ""}`}
+                    key={pod.id}
+                    transform={`translate(${px} ${py})`}
+                    className={`scene-object pod-artifact pod-${pod.state} ${selected === "pods" || actorActive("pods") ? "object-active" : ""}`}
+                    data-pod={pod.id}
+                    data-pod-state={pod.state}
+                    data-version={pod.version}
                     {...selectable(
                       "pods",
-                      `application Pod, ${ready ? "ready" : "unavailable"}`,
+                      `Pod ${pod.id}${pod.replacement ? " replacement" : ""}: ${pod.state}, ${pod.version}`,
                       onSelect,
                     )}
                   >
-                    <Artifact
-                      shape="cube"
-                      layer={
-                        s.phase === "Old and new versions overlap" && slot === 0
-                          ? "operations"
-                          : "workload"
-                      }
-                    />
-                    <circle
-                      cy="-64"
-                      r="5"
-                      fill={ready ? "#b1f5d7" : "#f17a97"}
-                      filter="url(#bloom)"
-                    />
+                    <g transform="scale(.62)">
+                      <Artifact
+                        shape="cube"
+                        layer={pod.version === "v2" ? "operations" : "workload"}
+                      />
+                      {pod.state !== "ready" && (
+                        <>
+                          <ellipse
+                            cy="-30"
+                            rx="46"
+                            ry="45"
+                            className="pod-state-halo"
+                          />
+                          <path
+                            d={
+                              pod.state === "lost" || pod.state === "offline"
+                                ? "M-20-59 20-19m0-40-40 40"
+                                : "M-15-50h30m-25 13h20m-15 13h10"
+                            }
+                            className="pod-state-mark"
+                          />
+                        </>
+                      )}
+                      <circle cy="-65" r="5" className="pod-status-dot" />
+                    </g>
+                    <text y="22" textAnchor="middle" className="pod-identity">
+                      {pod.id}
+                      {pod.replacement ? "?" : ""} ?{" "}
+                      {pod.state === "ready"
+                        ? props.scenario === "rollout"
+                          ? pod.version
+                          : "READY"
+                        : pod.state.toUpperCase()}
+                    </text>
                   </g>
                 );
               })}
@@ -716,11 +991,11 @@ export default function ArchitectureScene(props: SceneProps) {
                   onSelect,
                 )}
               >
-                <text y="102" textAnchor="middle" className="zone-label">
+                <text y="117" textAnchor="middle" className="zone-label">
                   ZONE {String.fromCharCode(65 + zone)}{" "}
-                  <tspan fill={failed ? "#ef829c" : "#86c8ae"}>
-                    {" "}
-                    / {failed ? "OFFLINE" : `${count} READY`}
+                  <tspan fill={failed ? "#ffa7bd" : "#a8e8c6"}>
+                    /{" "}
+                    {failed ? "0 READY ENDPOINTS" : `${count} READY ENDPOINTS`}
                   </tspan>
                 </text>
               </g>
@@ -729,7 +1004,10 @@ export default function ArchitectureScene(props: SceneProps) {
         })}
         {s.nodes === 4 && (
           <g className="extra-capacity" transform="translate(1520 925)">
-            <path d="M-40 0 0-20 40 0 0 20Z" fill="#142f32" stroke="#8bdbac" />
+            <Artifact shape="tower" layer="operations" />
+            <text y="-110" textAnchor="middle" className="recovery-label">
+              NODE 4 JOINS
+            </text>
             <text y="46" textAnchor="middle" className="recovery-label">
               +1 NODE / NEW CAPACITY
             </text>

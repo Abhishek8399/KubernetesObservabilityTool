@@ -38,6 +38,10 @@ for (const marker of [
   "COMPONENT FIELD NOTES",
   "FAILURE LABORATORY",
   "Build the platform",
+  "EXPLAIN THE CONNECTION",
+  "Restore dependency",
+  "Failure lesson timeline",
+  "What changes when a Pod fails?",
 ])
   assert.ok(js.includes(marker), `Missing content: ${marker}`);
 assert.ok(css.includes("prefers-reduced-motion"));

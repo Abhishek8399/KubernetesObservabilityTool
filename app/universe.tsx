@@ -21,7 +21,8 @@ import {
   type Layer,
 } from "./data/concepts";
 import { journeys, migrationSteps } from "./data/journeys";
-import { worldNodes } from "./data/world";
+import { worldNodes, type WorldLink } from "./data/world";
+import { explainConnection } from "./data/connections";
 import { Inspector } from "./explorer";
 import { Icon } from "./icons";
 import {
@@ -30,16 +31,15 @@ import {
   saveBookmarks,
   subscribeBookmarks,
 } from "./lib/bookmarks";
-import {
-  readyBackends,
-  scenarios,
-  simulate,
-  type Scenario,
-} from "./lib/simulation";
+import { readyBackends, scenarios, type Scenario } from "./lib/simulation";
+import LabConsole from "./lab-console";
+import { labFrame, advanceLab, boundedLabTime, labDuration } from "./lib/lab";
 import { Soundscape } from "./lib/sound";
 import "./universe.css";
+import "./lessons.css";
 
 type Modal =
+  | "connection"
   | "component"
   | "library"
   | "scenarios"
@@ -75,13 +75,16 @@ export default function Universe() {
     [scenario, setScenario] = useState<Scenario>("healthy"),
     [elapsed, setElapsed] = useState(0),
     [recovery, setRecovery] = useState(false),
-    [paused, setPaused] = useState(false);
+    [paused, setPaused] = useState(false),
+    [speed, setSpeed] = useState(1),
+    [resolved, setResolved] = useState(false);
   const [journeyId, setJourneyId] = useState<string | null>(null),
     [step, setStep] = useState(0),
     [autoTour, setAutoTour] = useState(false),
     [search, setSearch] = useState(""),
     [libraryLayer, setLibraryLayer] = useState<Layer | "all">("all"),
     [savedOnly, setSavedOnly] = useState(false);
+  const [connection, setConnection] = useState<WorldLink | null>(null);
   const [sound, setSound] = useState(false),
     [audioBusy, setAudioBusy] = useState(false),
     [message, setMessage] = useState("");
@@ -100,7 +103,9 @@ export default function Universe() {
     motionSnapshot,
     () => true,
   );
-  const sim = simulate(scenario, elapsed, recovery),
+  const playbackDone = elapsed >= labDuration;
+  const frame = labFrame(scenario, elapsed, recovery, resolved),
+    sim = frame.simulation,
     backends = readyBackends(sim);
   const journey = journeys.find((j) => j.id === journeyId),
     journeyStep = journey?.steps[step];
@@ -124,16 +129,28 @@ export default function Universe() {
       el.querySelector<HTMLButtonElement>("[data-dialog-close]")?.focus();
   }, [modal]);
   useEffect(() => {
-    if (paused || scenario === "healthy") return;
-    const timer = setInterval(() => setElapsed((t) => t + 1), 1000);
+    if (paused || modal || scenario === "healthy" || playbackDone) return;
+    const timer = setInterval(
+      () => setElapsed((t) => advanceLab(t, 0.25 * speed)),
+      250,
+    );
     return () => clearInterval(timer);
-  }, [paused, scenario]);
+  }, [paused, scenario, modal, speed, playbackDone]);
   useEffect(() => {
-    if (!journey || !autoTour || paused || step === journey.steps.length - 1)
+    if (
+      !journey ||
+      !autoTour ||
+      paused ||
+      modal ||
+      step === journey.steps.length - 1
+    )
       return;
     const timer = setTimeout(() => setStep((s) => s + 1), 7000);
     return () => clearTimeout(timer);
-  }, [journey, autoTour, paused, step]);
+  }, [journey, autoTour, paused, modal, step]);
+  useEffect(() => {
+    if (scenario !== "healthy" && frame.index >= 2) audio.current?.play("step");
+  }, [scenario, frame.index]);
   useEffect(() => {
     if (journeyStep) audio.current?.play("step");
   }, [journeyStep]);
@@ -211,11 +228,20 @@ export default function Universe() {
   }
   function changeScenario(id: Scenario) {
     setScenario(id);
-    setElapsed(0);
+    setElapsed(4);
+    setResolved(false);
+    setPaused(false);
+    setLayer("all");
+    setCamera(home);
+    setSelected(null);
+    setJourneyId(null);
     setModal(null);
     audio.current?.play(id === "healthy" ? "select" : "failure");
   }
   function beginJourney(id: string) {
+    setScenario("healthy");
+    setElapsed(0);
+    setResolved(false);
     setJourneyId(id);
     setStep(0);
     setAutoTour(false);
@@ -226,6 +252,7 @@ export default function Universe() {
   function resetWorld() {
     setScenario("healthy");
     setElapsed(0);
+    setResolved(false);
     setRecovery(false);
     setPaused(false);
     setJourneyId(null);
@@ -238,19 +265,34 @@ export default function Universe() {
   const artifact = worldNodes.find((n) => n.id === selected);
 
   return (
-    <main className={`universe ${paused || reducedMotion ? "motion-off" : ""}`}>
+    <main
+      className={`universe ${scenario !== "healthy" ? "has-lab" : ""} ${journey ? "has-journey" : ""} ${paused || reducedMotion ? "motion-off" : ""}`}
+    >
       <div className="world-vignette" />
       <ArchitectureScene
         scenario={scenario}
         simulation={sim}
+        lab={frame}
+        highlights={
+          scenario !== "healthy"
+            ? frame.chapter.focus
+            : journeyStep
+              ? [journeyStep.node]
+              : []
+        }
         selected={selected}
         focus={journeyStep?.node ?? null}
         layer={layer}
-        motion={!paused && !reducedMotion}
+        motion={!paused && !reducedMotion && !modal}
         recovery={recovery}
         camera={camera}
         onCamera={setCamera}
         onSelect={select}
+        onConnection={(link) => {
+          setConnection(link);
+          setModal("connection");
+          audio.current?.play("select");
+        }}
       />
       <header className="world-header">
         <button
@@ -298,14 +340,14 @@ export default function Universe() {
           <span /> A LIVING SYSTEM, EXPLAINED
         </span>
         <h1>
-          A world in
+          Understand the
           <br />
-          <em>orchestration.</em>
+          <em>whole system.</em>
         </h1>
         <p>
-          Go beneath the abstractions.
+          Follow a request. Watch controllers respond.
           <br />
-          Discover the machinery of Kubernetes.
+          See what changes when something fails.
         </p>
         <button onClick={() => beginJourney("request")} className="intro-link">
           <span className="tiny-play">
@@ -318,6 +360,70 @@ export default function Universe() {
           VENDOR NEUTRAL <span> / </span> OPEN TO EVERYONE
         </div>
       </div>
+      {scenario !== "healthy" && (
+        <LabConsole
+          frame={frame}
+          scenario={scenario}
+          paused={paused}
+          speed={speed}
+          recovery={recovery}
+          onSeek={(time) => {
+            setElapsed(boundedLabTime(time));
+            setPaused(true);
+            setResolved(false);
+          }}
+          onReplay={() => {
+            setElapsed(4);
+            setResolved(false);
+            setPaused(false);
+            audio.current?.play("failure");
+          }}
+          onPause={() => setPaused((v) => !v)}
+          onSpeed={(value) => {
+            if ([0.5, 1, 2].includes(value)) setSpeed(value);
+          }}
+          onRepair={() => {
+            setResolved(true);
+            setElapsed(22);
+            setPaused(false);
+            audio.current?.play("step");
+          }}
+          onRecovery={(enabled) => {
+            setRecovery(enabled);
+            setElapsed(4);
+            setPaused(false);
+          }}
+          onClose={resetWorld}
+          onInspect={select}
+          onChoose={() => setModal("scenarios")}
+        />
+      )}
+      <nav
+        className="overview-lessons"
+        aria-label="Understand the architecture"
+      >
+        <button onClick={() => beginJourney("request")}>
+          <Icon name="network" size={18} />
+          <span>
+            <strong>How does a request reach a Pod?</strong>
+            <small>Gateway ? Service ? a ready application replica</small>
+          </span>
+        </button>
+        <button onClick={() => beginJourney("deploy")}>
+          <Icon name="cpu" size={18} />
+          <span>
+            <strong>Who decides what should run?</strong>
+            <small>API state ? controllers ? scheduling ? kubelet</small>
+          </span>
+        </button>
+        <button onClick={() => changeScenario("pod-failure")}>
+          <Icon name="pulse" size={18} />
+          <span>
+            <strong>What changes when a Pod fails?</strong>
+            <small>Run the failure lesson and watch every stage</small>
+          </span>
+        </button>
+      </nav>
       <nav className="world-layers" aria-label="Highlight architecture layers">
         <span className="hud-label">LENSES</span>
         {layers.map((l) => (
@@ -361,7 +467,7 @@ export default function Universe() {
             <strong>{sim.nodes}</strong>PRIMARY NODES
           </span>
           <span>
-            <strong>{backends}</strong>SERVING BACKENDS
+            <strong>{backends > 0 ? "OK" : "FAIL"}</strong>REQUEST PATH
           </span>
         </div>
         {sim.pending > 0 && (
@@ -526,8 +632,8 @@ export default function Universe() {
           <i /> EDUCATIONAL SIMULATION <Icon name="chevron" size={10} />
         </button>
         <span>
-          DRAG TO EXPLORE <b>·</b> CLICK ANY COMPONENT <b>·</b> SOUND{" "}
-          {sound ? "ON" : "OFF"}
+          DRAG TO EXPLORE <b>·</b> CLICK COMPONENTS OR CONNECTIONS <b>·</b>{" "}
+          SOUND {sound ? "ON" : "OFF"}
         </span>
         <button onClick={() => setModal("library")} className="footer-saved">
           <Icon name="star" size={11} /> {saved.length} SAVED
@@ -547,15 +653,17 @@ export default function Universe() {
       >
         <div className="dialog-chrome">
           <span id="modal-title">
-            {modal === "component"
-              ? "COMPONENT FIELD NOTES"
-              : modal === "library"
-                ? "THE ARCHITECTURE LIBRARY"
-                : modal === "scenarios"
-                  ? "FAILURE LABORATORY"
-                  : modal === "migration"
-                    ? "FROM WORKLOAD TO PLATFORM"
-                    : "ABOUT THIS WORLD"}
+            {modal === "connection"
+              ? "EXPLAIN THE CONNECTION"
+              : modal === "component"
+                ? "COMPONENT FIELD NOTES"
+                : modal === "library"
+                  ? "THE ARCHITECTURE LIBRARY"
+                  : modal === "scenarios"
+                    ? "FAILURE LABORATORY"
+                    : modal === "migration"
+                      ? "FROM WORKLOAD TO PLATFORM"
+                      : "ABOUT THIS WORLD"}
           </span>
           <button
             className="world-icon"
@@ -567,6 +675,30 @@ export default function Universe() {
             <Icon name="close" size={20} />
           </button>
         </div>
+        {modal === "connection" && connection && (
+          <div className="connection-popup">
+            <span className="world-eyebrow">
+              {explainConnection(connection).kind}
+            </span>
+            <h2>{explainConnection(connection).title}</h2>
+            <div className="connection-endpoints">
+              <button onClick={() => select(connection.from)}>
+                {conceptById[connection.from].title}
+                <small>Explore this component</small>
+              </button>
+              <Icon name="arrow" size={25} />
+              <button onClick={() => select(connection.to)}>
+                {conceptById[connection.to].title}
+                <small>Explore this component</small>
+              </button>
+            </div>
+            <p>{explainConnection(connection).body}</p>
+            <div className="connection-note">
+              <strong>How to read this line</strong>
+              <p>{explainConnection(connection).note}</p>
+            </div>
+          </div>
+        )}
         {modal === "component" && component && (
           <div
             className="component-popup"

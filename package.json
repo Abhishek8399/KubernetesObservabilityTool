@@ -16,7 +16,8 @@
     "test": "node --experimental-strip-types --test app/data/*.test.ts app/lib/*.test.ts",
     "smoke": "node scripts/smoke.mjs",
     "smoke:static": "node scripts/static-smoke.mjs",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build:static && npm run smoke:static"
+    "check": "npm run typecheck && npm run lint && npm test && npm run smoke:scene && npm run build:static && npm run smoke:static",
+    "smoke:scene": "node scripts/scene-smoke.mjs"
   },
   "dependencies": {
     "next": "16.3.6",

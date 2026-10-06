@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./explorer.css";
 import "./polish.css";
 import "./universe.css";
+import "./lessons.css";
 
 export const metadata: Metadata = {
   title: "Kubernetes Observatory — Architecture in motion",
